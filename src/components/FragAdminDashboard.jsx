@@ -12,6 +12,59 @@ import {
   getDateBoundaries
 } from '../services/adminService.js';
 
+// Reusable Sortable Column Header Component
+function SortableTh({ label, sortKey, currentKey, order, onSort, align = 'left', className = '' }) {
+  const isActive = currentKey === sortKey;
+  return (
+    <th
+      onClick={() => onSort(sortKey)}
+      className={`py-3 px-3 cursor-pointer select-none transition group text-[11px] font-bold uppercase tracking-wider ${
+        align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+      } ${isActive ? 'text-indigo-400 bg-indigo-500/5' : 'text-slate-400 hover:text-slate-200'} ${className}`}
+      title={`Sort by ${label} (${isActive && order === 'asc' ? 'descending' : 'ascending'})`}
+    >
+      <div className={`inline-flex items-center gap-1.5 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'}`}>
+        <span>{label}</span>
+        {isActive ? (
+          order === 'asc' ? (
+            <ArrowUp className="w-3.5 h-3.5 text-indigo-400 stroke-[2.5]" />
+          ) : (
+            <ArrowDown className="w-3.5 h-3.5 text-indigo-400 stroke-[2.5]" />
+          )
+        ) : (
+          <ArrowUpDown className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition" />
+        )}
+      </div>
+    </th>
+  );
+}
+
+// Generic comparator supporting numbers, strings, dates, arrays, and nulls
+function genericSort(list, key, order) {
+  return [...list].sort((a, b) => {
+    let valA = a[key];
+    let valB = b[key];
+
+    if (valA === null || valA === undefined) valA = order === 'asc' ? Infinity : -Infinity;
+    if (valB === null || valB === undefined) valB = order === 'asc' ? Infinity : -Infinity;
+
+    if (key === 'timestamp' || key === 'lastConvertAt') {
+      valA = new Date(valA).getTime() || 0;
+      valB = new Date(valB).getTime() || 0;
+    } else if (typeof valA === 'string' && typeof valB === 'string') {
+      valA = valA.toLowerCase();
+      valB = valB.toLowerCase();
+    } else if (Array.isArray(valA) && Array.isArray(valB)) {
+      valA = valA[0] ? valA[0].toLowerCase() : '';
+      valB = valB[0] ? valB[0].toLowerCase() : '';
+    }
+
+    if (valA < valB) return order === 'asc' ? -1 : 1;
+    if (valA > valB) return order === 'asc' ? 1 : -1;
+    return 0;
+  });
+}
+
 export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSellerPortal }) {
   // Global Telemetry State
   const [loading, setLoading] = useState(true);
@@ -20,7 +73,6 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
   const [rawLogs, setRawLogs] = useState([]);
 
   // Date Filtering State
-  // Presets: 'today' | 'yesterday' | '7d' | '14d' | '30d' | 'all' | 'custom'
   const [datePreset, setDatePreset] = useState('7d');
   const [customStart, setCustomStart] = useState(() => {
     const d = new Date();
@@ -32,10 +84,26 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
   // Active Tab: 'sellers' | 'ai_interaction' | 'decant_vs_retail' | 'live_stream'
   const [activeTab, setActiveTab] = useState('sellers');
 
-  // Seller table search and sort
+  // Table 1: Seller Conversions Table Sorting & Filtering
   const [sellerSearch, setSellerSearch] = useState('');
   const [sellerSortKey, setSellerSortKey] = useState('totalConverts');
   const [sellerSortOrder, setSellerSortOrder] = useState('desc');
+
+  // Table 2: AI Queries Table Sorting
+  const [aiSortKey, setAiSortKey] = useState('count');
+  const [aiSortOrder, setAiSortOrder] = useState('desc');
+
+  // Table 3: Top Bottles Sorting
+  const [bottlesSortKey, setBottlesSortKey] = useState('count');
+  const [bottlesSortOrder, setBottlesSortOrder] = useState('desc');
+
+  // Table 3: Top Decants Sorting
+  const [decantsSortKey, setDecantsSortKey] = useState('count');
+  const [decantsSortOrder, setDecantsSortOrder] = useState('desc');
+
+  // Table 4: Live Click Stream Sorting
+  const [streamSortKey, setStreamSortKey] = useState('timestamp');
+  const [streamSortOrder, setStreamSortOrder] = useState('desc');
 
   // Initial Load
   const loadLogs = async (force = false) => {
@@ -81,6 +149,52 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
     return `${diffDays}d ago`;
   };
 
+  // Sort Handlers
+  const handleSortSellers = (key) => {
+    if (sellerSortKey === key) {
+      setSellerSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSellerSortKey(key);
+      setSellerSortOrder('desc');
+    }
+  };
+
+  const handleSortAi = (key) => {
+    if (aiSortKey === key) {
+      setAiSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setAiSortKey(key);
+      setAiSortOrder('desc');
+    }
+  };
+
+  const handleSortBottles = (key) => {
+    if (bottlesSortKey === key) {
+      setBottlesSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setBottlesSortKey(key);
+      setBottlesSortOrder('desc');
+    }
+  };
+
+  const handleSortDecants = (key) => {
+    if (decantsSortKey === key) {
+      setDecantsSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setDecantsSortKey(key);
+      setDecantsSortOrder('desc');
+    }
+  };
+
+  const handleSortStream = (key) => {
+    if (streamSortKey === key) {
+      setStreamSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setStreamSortKey(key);
+      setStreamSortOrder('desc');
+    }
+  };
+
   // Filtered and Sorted Seller Conversions
   const filteredSellers = useMemo(() => {
     if (!analytics?.sellerConversions) return [];
@@ -94,27 +208,32 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
       );
     }
 
-    list.sort((a, b) => {
-      let valA = a[sellerSortKey] ?? 0;
-      let valB = b[sellerSortKey] ?? 0;
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
-      if (valA < valB) return sellerSortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sellerSortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return list;
+    return genericSort(list, sellerSortKey, sellerSortOrder);
   }, [analytics, sellerSearch, sellerSortKey, sellerSortOrder]);
 
-  const handleSortSellers = (key) => {
-    if (sellerSortKey === key) {
-      setSellerSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSellerSortKey(key);
-      setSellerSortOrder('desc');
-    }
-  };
+  // Sorted AI Queries
+  const sortedAiQueries = useMemo(() => {
+    if (!analytics?.aiInteraction?.topQueries) return [];
+    return genericSort(analytics.aiInteraction.topQueries, aiSortKey, aiSortOrder);
+  }, [analytics, aiSortKey, aiSortOrder]);
+
+  // Sorted Top Bottles
+  const sortedTopBottles = useMemo(() => {
+    if (!analytics?.decantVsRetail?.topBottles) return [];
+    return genericSort(analytics.decantVsRetail.topBottles, bottlesSortKey, bottlesSortOrder);
+  }, [analytics, bottlesSortKey, bottlesSortOrder]);
+
+  // Sorted Top Decants
+  const sortedTopDecants = useMemo(() => {
+    if (!analytics?.decantVsRetail?.topDecants) return [];
+    return genericSort(analytics.decantVsRetail.topDecants, decantsSortKey, decantsSortOrder);
+  }, [analytics, decantsSortKey, decantsSortOrder]);
+
+  // Sorted Live Stream
+  const sortedLiveStream = useMemo(() => {
+    if (!analytics?.liveClickStream) return [];
+    return genericSort(analytics.liveClickStream, streamSortKey, streamSortOrder);
+  }, [analytics, streamSortKey, streamSortOrder]);
 
   const kpis = analytics?.kpis;
   const ai = analytics?.aiInteraction;
@@ -141,7 +260,7 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                 </h1>
               </div>
               <p className="text-xs text-slate-400">
-                Tracking user sessions, AI queries, card detail views & direct WhatsApp conversions
+                Interactive Date Range Filtering &bull; Multi-Column Sortable &bull; Real-time Telemetry
               </p>
             </div>
           </div>
@@ -431,7 +550,7 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                       WhatsApp Buyer Converts for {analytics.timeframe.label}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Direct purchase clicks attributed to verified community sellers within this date window
+                      Click any column header to sort ascending or descending
                     </p>
                   </div>
 
@@ -447,44 +566,76 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                   </div>
                 </div>
 
-                {/* Seller Conversion Table */}
+                {/* Seller Conversion Table (100% Sortable on Every Column) */}
                 <div className="bg-slate-900/80 rounded-xl border border-slate-800 overflow-hidden shadow-lg">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
-                          <th className="py-3 px-4">Seller Name</th>
-                          <th 
-                            className="py-3 px-3 cursor-pointer hover:text-indigo-400 transition"
-                            onClick={() => handleSortSellers('totalConverts')}
-                          >
-                            <div className="flex items-center gap-1">
-                              WhatsApp Converts
-                              <ArrowUpDown className="w-3 h-3 text-slate-500" />
-                            </div>
-                          </th>
-                          <th className="py-3 px-3">Bottle vs Decant Split</th>
-                          <th 
-                            className="py-3 px-3 cursor-pointer hover:text-indigo-400 transition"
-                            onClick={() => handleSortSellers('platformShare')}
-                          >
-                            <div className="flex items-center gap-1">
-                              Conversion Share
-                              <ArrowUpDown className="w-3 h-3 text-slate-500" />
-                            </div>
-                          </th>
-                          <th 
-                            className="py-3 px-3 cursor-pointer hover:text-indigo-400 transition"
-                            onClick={() => handleSortSellers('inquiredGmv')}
-                          >
-                            <div className="flex items-center gap-1">
-                              Inquired Pipeline GMV
-                              <ArrowUpDown className="w-3 h-3 text-slate-500" />
-                            </div>
-                          </th>
-                          <th className="py-3 px-3">Average Order Value</th>
-                          <th className="py-3 px-3">Top Converted Fragrances</th>
-                          <th className="py-3 px-4 text-right">Last Convert</th>
+                        <tr className="bg-slate-950/80 border-b border-slate-800">
+                          <SortableTh
+                            label="Seller Name"
+                            sortKey="name"
+                            currentKey={sellerSortKey}
+                            order={sellerSortOrder}
+                            onSort={handleSortSellers}
+                          />
+                          <SortableTh
+                            label="WhatsApp Converts"
+                            sortKey="totalConverts"
+                            currentKey={sellerSortKey}
+                            order={sellerSortOrder}
+                            onSort={handleSortSellers}
+                          />
+                          <SortableTh
+                            label="Bottle Converts"
+                            sortKey="bottleConverts"
+                            currentKey={sellerSortKey}
+                            order={sellerSortOrder}
+                            onSort={handleSortSellers}
+                          />
+                          <SortableTh
+                            label="Decant Converts"
+                            sortKey="decantConverts"
+                            currentKey={sellerSortKey}
+                            order={sellerSortOrder}
+                            onSort={handleSortSellers}
+                          />
+                          <SortableTh
+                            label="Conversion Share"
+                            sortKey="platformShare"
+                            currentKey={sellerSortKey}
+                            order={sellerSortOrder}
+                            onSort={handleSortSellers}
+                          />
+                          <SortableTh
+                            label="Inquired Pipeline GMV"
+                            sortKey="inquiredGmv"
+                            currentKey={sellerSortKey}
+                            order={sellerSortOrder}
+                            onSort={handleSortSellers}
+                          />
+                          <SortableTh
+                            label="Average Order Value"
+                            sortKey="avgAov"
+                            currentKey={sellerSortKey}
+                            order={sellerSortOrder}
+                            onSort={handleSortSellers}
+                          />
+                          <SortableTh
+                            label="Top Converted Fragrances"
+                            sortKey="topPerfumes"
+                            currentKey={sellerSortKey}
+                            order={sellerSortOrder}
+                            onSort={handleSortSellers}
+                          />
+                          <SortableTh
+                            label="Last Convert"
+                            sortKey="lastConvertAt"
+                            currentKey={sellerSortKey}
+                            order={sellerSortOrder}
+                            onSort={handleSortSellers}
+                            align="right"
+                          />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60 font-medium">
@@ -508,14 +659,21 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                               </div>
                             </td>
 
-                            <td className="py-3.5 px-3 min-w-[150px]">
-                              <div className="flex items-center justify-between text-[11px] font-semibold mb-1">
-                                <span className="text-emerald-400">{s.bottleConverts} Bottles</span>
-                                <span className="text-purple-400">{s.decantConverts} Decants</span>
+                            <td className="py-3.5 px-3">
+                              <div className="text-xs font-bold text-emerald-400">
+                                {s.bottleConverts}
                               </div>
-                              <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden flex">
-                                <div className="bg-emerald-500 h-full" style={{ width: `${s.bottleShare}%` }} />
-                                <div className="bg-purple-500 h-full" style={{ width: `${s.decantShare}%` }} />
+                              <div className="text-[10px] text-slate-500 mt-0.5">
+                                {s.bottleShare}% of leads
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-3">
+                              <div className="text-xs font-bold text-purple-400">
+                                {s.decantConverts}
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-0.5">
+                                {s.decantShare}% of leads
                               </div>
                             </td>
 
@@ -731,28 +889,57 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                   </div>
                 </div>
 
-                {/* Top AI Search Queries in this Date Range */}
+                {/* Top AI Search Queries in this Date Range (Sortable on Every Column) */}
                 <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-5">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-1">
-                    <Search className="w-4 h-4 text-indigo-400" />
-                    Top AI Search Queries for {analytics.timeframe.label}
-                  </h3>
-                  <p className="text-xs text-slate-400 mb-4">
-                    Most frequently queried terms typed by shoppers during this time window
-                  </p>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Search className="w-4 h-4 text-indigo-400" />
+                        Top AI Search Queries for {analytics.timeframe.label}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Click column headers to sort by search volume, unique sessions, or zero-result misses
+                      </p>
+                    </div>
+                  </div>
 
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
-                          <th className="py-3 px-4">Search Query</th>
-                          <th className="py-3 px-3">Total Searches</th>
-                          <th className="py-3 px-3">Unique Sessions</th>
-                          <th className="py-3 px-4 text-right">Result Status</th>
+                        <tr className="bg-slate-950/80 border-b border-slate-800">
+                          <SortableTh
+                            label="Search Query"
+                            sortKey="query"
+                            currentKey={aiSortKey}
+                            order={aiSortOrder}
+                            onSort={handleSortAi}
+                          />
+                          <SortableTh
+                            label="Total Searches"
+                            sortKey="count"
+                            currentKey={aiSortKey}
+                            order={aiSortOrder}
+                            onSort={handleSortAi}
+                          />
+                          <SortableTh
+                            label="Unique Sessions"
+                            sortKey="uniqueSessions"
+                            currentKey={aiSortKey}
+                            order={aiSortOrder}
+                            onSort={handleSortAi}
+                          />
+                          <SortableTh
+                            label="Result Status"
+                            sortKey="zeroResults"
+                            currentKey={aiSortKey}
+                            order={aiSortOrder}
+                            onSort={handleSortAi}
+                            align="right"
+                          />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60 font-medium">
-                        {(ai?.topQueries || []).map((sq, idx) => (
+                        {sortedAiQueries.map((sq, idx) => (
                           <tr key={idx} className="hover:bg-slate-800/40 transition">
                             <td className="py-3 px-4 font-bold text-white capitalize">
                               "{sq.query}"
@@ -824,17 +1011,49 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                       </div>
                     </div>
 
+                    {/* Top Converted Bottles Sortable Table */}
                     <div>
                       <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
                         Top Converted Full Bottles ({analytics.timeframe.label}):
                       </h4>
-                      <div className="space-y-1.5">
-                        {(dvr?.topBottles || []).map((b, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-xs bg-slate-950 px-3 py-2 rounded-lg border border-slate-800/80">
-                            <span className="font-semibold text-slate-200">{b.name}</span>
-                            <span className="font-bold text-emerald-400">{b.count} converts ({b.share}%)</span>
-                          </div>
-                        ))}
+                      <div className="bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-900 border-b border-slate-800">
+                              <SortableTh
+                                label="Fragrance Name"
+                                sortKey="name"
+                                currentKey={bottlesSortKey}
+                                order={bottlesSortOrder}
+                                onSort={handleSortBottles}
+                              />
+                              <SortableTh
+                                label="Converts"
+                                sortKey="count"
+                                currentKey={bottlesSortKey}
+                                order={bottlesSortOrder}
+                                onSort={handleSortBottles}
+                              />
+                              <SortableTh
+                                label="Share %"
+                                sortKey="share"
+                                currentKey={bottlesSortKey}
+                                order={bottlesSortOrder}
+                                onSort={handleSortBottles}
+                                align="right"
+                              />
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {sortedTopBottles.map((b, idx) => (
+                              <tr key={idx} className="hover:bg-slate-900/50">
+                                <td className="py-2.5 px-3 font-semibold text-slate-200">{b.name}</td>
+                                <td className="py-2.5 px-3 font-bold text-emerald-400">{b.count}</td>
+                                <td className="py-2.5 px-3 text-right font-medium text-slate-400">{b.share}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </div>
@@ -874,17 +1093,49 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                       </div>
                     </div>
 
+                    {/* Top Converted Decants Sortable Table */}
                     <div>
                       <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
                         Top Converted Decants ({analytics.timeframe.label}):
                       </h4>
-                      <div className="space-y-1.5">
-                        {(dvr?.topDecants || []).map((d, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-xs bg-slate-950 px-3 py-2 rounded-lg border border-slate-800/80">
-                            <span className="font-semibold text-slate-200">{d.name}</span>
-                            <span className="font-bold text-purple-400">{d.count} converts ({d.share}%)</span>
-                          </div>
-                        ))}
+                      <div className="bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-900 border-b border-slate-800">
+                              <SortableTh
+                                label="Fragrance Name"
+                                sortKey="name"
+                                currentKey={decantsSortKey}
+                                order={decantsSortOrder}
+                                onSort={handleSortDecants}
+                              />
+                              <SortableTh
+                                label="Converts"
+                                sortKey="count"
+                                currentKey={decantsSortKey}
+                                order={decantsSortOrder}
+                                onSort={handleSortDecants}
+                              />
+                              <SortableTh
+                                label="Share %"
+                                sortKey="share"
+                                currentKey={decantsSortKey}
+                                order={decantsSortOrder}
+                                onSort={handleSortDecants}
+                                align="right"
+                              />
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {sortedTopDecants.map((d, idx) => (
+                              <tr key={idx} className="hover:bg-slate-900/50">
+                                <td className="py-2.5 px-3 font-semibold text-slate-200">{d.name}</td>
+                                <td className="py-2.5 px-3 font-bold text-purple-400">{d.count}</td>
+                                <td className="py-2.5 px-3 text-right font-medium text-slate-400">{d.share}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </div>
@@ -908,7 +1159,7 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                         Live Click & Convert Stream ({analytics.timeframe.label})
                       </h3>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Chronological feed of every detail click, card open, and WhatsApp lead
+                        Click column headers to sort by event type, price, seller, traffic source, or timestamp
                       </p>
                     </div>
                   </div>
@@ -916,18 +1167,61 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
-                          <th className="py-3 px-4">Event Type</th>
-                          <th className="py-3 px-4">Fragrance</th>
-                          <th className="py-3 px-3">Format</th>
-                          <th className="py-3 px-3">Price</th>
-                          <th className="py-3 px-3">Attributed Seller</th>
-                          <th className="py-3 px-3">Source / Referrer</th>
-                          <th className="py-3 px-4 text-right">Timestamp</th>
+                        <tr className="bg-slate-950/80 border-b border-slate-800">
+                          <SortableTh
+                            label="Event Type"
+                            sortKey="type"
+                            currentKey={streamSortKey}
+                            order={streamSortOrder}
+                            onSort={handleSortStream}
+                          />
+                          <SortableTh
+                            label="Fragrance"
+                            sortKey="name"
+                            currentKey={streamSortKey}
+                            order={streamSortOrder}
+                            onSort={handleSortStream}
+                          />
+                          <SortableTh
+                            label="Format"
+                            sortKey="format"
+                            currentKey={streamSortKey}
+                            order={streamSortOrder}
+                            onSort={handleSortStream}
+                          />
+                          <SortableTh
+                            label="Quoted Price"
+                            sortKey="price"
+                            currentKey={streamSortKey}
+                            order={streamSortOrder}
+                            onSort={handleSortStream}
+                          />
+                          <SortableTh
+                            label="Attributed Seller"
+                            sortKey="seller"
+                            currentKey={streamSortKey}
+                            order={streamSortOrder}
+                            onSort={handleSortStream}
+                          />
+                          <SortableTh
+                            label="Source / Referrer"
+                            sortKey="source"
+                            currentKey={streamSortKey}
+                            order={streamSortOrder}
+                            onSort={handleSortStream}
+                          />
+                          <SortableTh
+                            label="Timestamp"
+                            sortKey="timestamp"
+                            currentKey={streamSortKey}
+                            order={streamSortOrder}
+                            onSort={handleSortStream}
+                            align="right"
+                          />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60 font-medium">
-                        {(analytics.liveClickStream || []).map((ev) => (
+                        {sortedLiveStream.map((ev) => (
                           <tr key={ev.id} className="hover:bg-slate-800/40 transition">
                             <td className="py-3 px-4">
                               {ev.type === 'whatsapp_convert' ? (
