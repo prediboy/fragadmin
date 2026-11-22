@@ -5,7 +5,7 @@ import {
   Tag, MessageCircle, BarChart2, Layers, DollarSign, Package,
   Search, ExternalLink, RefreshCw, Sparkles, ChevronRight, Check, X,
   TrendingUp, MousePointer, HelpCircle, Bot, Compass, Send, Phone,
-  Droplets, Sun, Flame, Briefcase
+  Droplets, Sun, Flame, Briefcase, GitBranch, CornerDownRight, MessageSquare, ArrowRight
 } from 'lucide-react';
 import {
   fetchAllTelemetryLogs,
@@ -89,9 +89,11 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
 
   // Khushboo Chat Telemetry State
   const [rawChatLogs, setRawChatLogs] = useState([]);
-  const [khushbooFilter, setKhushbooFilter] = useState('all'); // 'all' | 'with_matches' | 'conversational' | 'rate_limited'
+  const [khushbooFilter, setKhushbooFilter] = useState('all'); // 'all' | 'multi_turn' | 'with_matches' | 'conversational' | 'rate_limited' | 'aquatic' ...
   const [khushbooSearch, setKhushbooSearch] = useState('');
   const [expandedTurnId, setExpandedTurnId] = useState(null);
+  const [khushbooViewMode, setKhushbooViewMode] = useState('threads'); // 'threads' | 'turns'
+  const [expandedSessionId, setExpandedSessionId] = useState(null);
 
   // Table 1: Seller Conversions Table Sorting & Filtering
   const [sellerSearch, setSellerSearch] = useState('');
@@ -155,10 +157,12 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
     return { ...clickData, khushboo: khushbooData };
   }, [rawLogs, rawChatLogs, datePreset, customStart, customEnd]);
 
-  // Filtered Ask Khushboo Dialogues & Crux
+  // Filtered Ask Khushboo Dialogues & Crux (Individual Turns)
   const filteredKhushbooTurns = useMemo(() => {
     const turns = analytics?.khushboo?.dialogTurns || [];
     return turns.filter(t => {
+      if (khushbooFilter === 'multi_turn' && !t.isMultiTurn) return false;
+      if (khushbooFilter === 'single_turn' && t.isMultiTurn) return false;
       if (khushbooFilter === 'with_matches' && t.matchedCount === 0) return false;
       if (khushbooFilter === 'rate_limited' && t.status !== 'rate_limited') return false;
       if (khushbooFilter === 'conversational' && (t.matchedCount > 0 || t.status === 'rate_limited')) return false;
@@ -175,8 +179,10 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
 
       if (khushbooSearch.trim()) {
         const q = khushbooSearch.toLowerCase();
+        const inSession = (t.sessionId || '').toLowerCase().includes(q);
         const inQuery = (t.query || '').toLowerCase().includes(q);
         const inReply = (t.reply || '').toLowerCase().includes(q);
+        const inSemantic = (t.semanticSearchPrompt || '').toLowerCase().includes(q);
         const inSummary = (t.tasteSummary || '').toLowerCase().includes(q);
         const inCategory = (t.crux?.category || '').toLowerCase().includes(q);
         const inDNA = (t.crux?.referenceDNA || '').toLowerCase().includes(q);
@@ -184,12 +190,52 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
         const inSeason = (t.crux?.season || '').toLowerCase().includes(q);
         const inNotes = (t.crux?.detectedNotes || []).some(n => n.toLowerCase().includes(q));
         const inMatches = (t.matchedCards || []).some(c => (c.name || '').toLowerCase().includes(q) || (c.brand || '').toLowerCase().includes(q));
-        if (!inQuery && !inReply && !inSummary && !inCategory && !inDNA && !inBudget && !inSeason && !inNotes && !inMatches) return false;
+        if (!inSession && !inQuery && !inReply && !inSemantic && !inSummary && !inCategory && !inDNA && !inBudget && !inSeason && !inNotes && !inMatches) return false;
       }
 
       return true;
     });
   }, [analytics?.khushboo?.dialogTurns, khushbooFilter, khushbooSearch]);
+
+  // Filtered Ask Khushboo Conversation Threads
+  const filteredKhushbooThreads = useMemo(() => {
+    const threads = analytics?.khushboo?.conversationThreads || [];
+    return threads.filter(thread => {
+      if (khushbooFilter === 'multi_turn' && !thread.isMultiTurn) return false;
+      if (khushbooFilter === 'single_turn' && thread.isMultiTurn) return false;
+      if (khushbooFilter === 'with_matches' && !thread.turns.some(t => t.matchedCount > 0)) return false;
+      if (khushbooFilter === 'rate_limited' && !thread.turns.some(t => t.status === 'rate_limited')) return false;
+
+      // Crux archetype & category filters
+      if (khushbooFilter === 'aquatic' && !thread.turns.some(t => t.crux?.category === 'Aquatic & Watery')) return false;
+      if (khushbooFilter === 'citrus' && !thread.turns.some(t => t.crux?.category === 'Citrus & High-Heat Fresh')) return false;
+      if (khushbooFilter === 'gourmand' && !thread.turns.some(t => t.crux?.category === 'Sweet & Gourmand' || t.crux?.category === 'Cozy Winter & Boozy')) return false;
+      if (khushbooFilter === 'budget' && !thread.turns.some(t => t.crux?.budgetConstraint)) return false;
+      if (khushbooFilter === 'clones' && !thread.turns.some(t => t.crux?.category === 'Clone & DNA Seeker' || t.crux?.referenceDNA)) return false;
+      if (khushbooFilter === 'office' && !thread.turns.some(t => t.crux?.category === 'Office & Clean Daily')) return false;
+      if (khushbooFilter === 'dark' && !thread.turns.some(t => t.crux?.category === 'Dark Smoky & Leather')) return false;
+      if (khushbooFilter === 'zero_matches' && !thread.turns.some(t => t.matchedCount === 0)) return false;
+
+      if (khushbooSearch.trim()) {
+        const q = khushbooSearch.toLowerCase();
+        const inSessionId = (thread.sessionId || '').toLowerCase().includes(q);
+        const inTurns = thread.turns.some(t => {
+          const inQuery = (t.query || '').toLowerCase().includes(q);
+          const inReply = (t.reply || '').toLowerCase().includes(q);
+          const inSemantic = (t.semanticSearchPrompt || '').toLowerCase().includes(q);
+          const inSummary = (t.tasteSummary || '').toLowerCase().includes(q);
+          const inCategory = (t.crux?.category || '').toLowerCase().includes(q);
+          const inDNA = (t.crux?.referenceDNA || '').toLowerCase().includes(q);
+          const inBudget = (t.crux?.budgetConstraint || '').toLowerCase().includes(q);
+          const inMatches = (t.matchedCards || []).some(c => (c.name || '').toLowerCase().includes(q) || (c.brand || '').toLowerCase().includes(q));
+          return inQuery || inReply || inSemantic || inSummary || inCategory || inDNA || inBudget || inMatches;
+        });
+        if (!inSessionId && !inTurns) return false;
+      }
+
+      return true;
+    });
+  }, [analytics?.khushboo?.conversationThreads, khushbooFilter, khushbooSearch]);
 
   // Relative time helper
   const getRelativeTime = (timestamp) => {
@@ -819,7 +865,23 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                     </p>
                   </div>
 
-                  {/* 2. Dominant Scent Demand Crux */}
+                  {/* 2. Multi-Turn Conversation Journeys */}
+                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2">
+                      <span>Multi-Turn Journeys</span>
+                      <GitBranch className="w-4 h-4 text-indigo-400" />
+                    </div>
+                    <div className="text-3xl font-black text-white">
+                      {analytics?.khushboo?.multiTurnSessionsCount || 0}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      <span className="text-indigo-400 font-bold">
+                        {analytics?.khushboo?.uniqueSessions ? Math.round(((analytics?.khushboo?.multiTurnSessionsCount || 0) / analytics.khushboo.uniqueSessions) * 100) : 0}%
+                      </span> of shoppers refined tastes across multi-turn dialogues.
+                    </p>
+                  </div>
+
+                  {/* 3. Dominant Scent Demand Crux */}
                   <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
                     <div className="flex items-center justify-between text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2">
                       <span>Top Demand Archetype</span>
@@ -830,20 +892,6 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                     </div>
                     <p className="text-xs text-slate-400 mt-1">
                       <span className="text-cyan-400 font-bold">{analytics?.khushboo?.categoryDistribution?.[0]?.percent || 0}%</span> of total customer inquiries.
-                    </p>
-                  </div>
-
-                  {/* 3. Budget-Constrained Inquiries */}
-                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-                    <div className="flex items-center justify-between text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">
-                      <span>Price-Gated Queries</span>
-                      <DollarSign className="w-4 h-4 text-emerald-400" />
-                    </div>
-                    <div className="text-3xl font-black text-white">
-                      {analytics?.khushboo?.budgetPercent || 0}%
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">
-                      <span className="text-emerald-400 font-bold">{analytics?.khushboo?.budgetConstrainedCount || 0} queries</span> specified hard budget limits (e.g. &lt;₹2.5k).
                     </p>
                   </div>
 
@@ -986,7 +1034,8 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                   {/* Archetype Quick Filter Pills */}
                   <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-mono pb-1 sm:pb-0">
                     {[
-                      { id: 'all', label: 'All Prompts' },
+                      { id: 'all', label: 'All Dialogues' },
+                      { id: 'multi_turn', label: '🧵 Multi-Turn Journeys' },
                       { id: 'aquatic', label: '🌊 Aquatic & Watery' },
                       { id: 'gourmand', label: '🍫 Sweet & Cozy' },
                       { id: 'budget', label: '💵 Budget-Capped' },
@@ -1010,273 +1059,558 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                   </div>
                 </div>
 
-                {/* Dialog Turns & Crux Feed */}
-                <div className="space-y-4">
-                  <div className="text-xs font-mono text-slate-400 flex items-center justify-between px-1">
-                    <span>Showing <strong className="text-white">{filteredKhushbooTurns.length}</strong> shopper queries in {analytics?.timeframe?.label}</span>
-                    <span>Click any card to reveal full conversation & sommelier dossier</span>
+                {/* View Mode Toggle: Conversation Threads vs Single Query Turns */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/40 p-3 rounded-xl border border-slate-800/80">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-mono text-slate-400 font-bold uppercase tracking-wider mr-1">
+                      View Mode:
+                    </span>
+                    <button
+                      onClick={() => setKhushbooViewMode('threads')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono flex items-center gap-2 transition ${
+                        khushbooViewMode === 'threads'
+                          ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                          : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      }`}
+                    >
+                      <GitBranch className="w-3.5 h-3.5" />
+                      <span>🧵 Group by Conversation Threads ({filteredKhushbooThreads.length} Sessions)</span>
+                    </button>
+
+                    <button
+                      onClick={() => setKhushbooViewMode('turns')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono flex items-center gap-2 transition ${
+                        khushbooViewMode === 'turns'
+                          ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                          : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      }`}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>📄 Individual Query Feed ({filteredKhushbooTurns.length} Prompts)</span>
+                    </button>
                   </div>
 
-                  {filteredKhushbooTurns.length === 0 ? (
-                    <div className="text-center py-12 bg-slate-900/40 rounded-xl border border-slate-800 p-6 text-slate-400 text-xs font-mono">
-                      No customer queries match your selected crux filters.
-                    </div>
-                  ) : (
-                    filteredKhushbooTurns.map((turn) => {
-                      const isExpanded = expandedTurnId === turn.id;
-                      const crux = turn.crux || {};
+                  <div className="text-xs font-mono text-slate-400 flex items-center gap-2">
+                    <span>Showing <strong className="text-white">{khushbooViewMode === 'threads' ? filteredKhushbooThreads.length : filteredKhushbooTurns.length}</strong> {khushbooViewMode === 'threads' ? 'sessions' : 'prompts'}</span>
+                  </div>
+                </div>
 
-                      return (
-                        <div
-                          key={turn.id}
-                          className={`rounded-xl border transition-all overflow-hidden ${
-                            isExpanded
-                              ? 'bg-slate-900 border-amber-500/50 shadow-2xl'
-                              : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                          }`}
-                        >
-                          {/* Card Summary Header */}
+                {/* ============================================================== */}
+                {/* VIEW 1: CONVERSATION THREADS (SESSIONS GROUPING)               */}
+                {/* ============================================================== */}
+                {khushbooViewMode === 'threads' && (
+                  <div className="space-y-4">
+                    {filteredKhushbooThreads.length === 0 ? (
+                      <div className="text-center py-12 bg-slate-900/40 rounded-xl border border-slate-800 p-6 text-slate-400 text-xs font-mono">
+                        No conversation sessions match your selected filters.
+                      </div>
+                    ) : (
+                      filteredKhushbooThreads.map((thread) => {
+                        const isExpanded = expandedSessionId === thread.sessionId;
+                        return (
                           <div
-                            onClick={() => setExpandedTurnId(isExpanded ? null : turn.id)}
-                            className="p-4 cursor-pointer select-none space-y-3"
+                            key={thread.sessionId}
+                            className={`rounded-xl border transition-all overflow-hidden ${
+                              isExpanded
+                                ? 'bg-slate-900 border-amber-500/50 shadow-2xl'
+                                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                            }`}
                           >
-                            {/* Top Badges & Crux Tags */}
-                            <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {/* Archetype Badge */}
-                                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                                  crux.category === 'Aquatic & Watery' ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800' :
-                                  crux.category === 'Citrus & High-Heat Fresh' ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800' :
-                                  crux.category === 'Sweet & Gourmand' ? 'bg-amber-950/80 text-amber-300 border-amber-800' :
-                                  crux.category === 'Cozy Winter & Boozy' ? 'bg-orange-950/80 text-orange-300 border-orange-800' :
-                                  crux.category === 'Office & Clean Daily' ? 'bg-blue-950/80 text-blue-300 border-blue-800' :
-                                  crux.category === 'Dark Smoky & Leather' ? 'bg-purple-950/80 text-purple-300 border-purple-800' :
-                                  crux.category === 'Iris & Seductive Evening' ? 'bg-rose-950/80 text-rose-300 border-rose-800' :
-                                  'bg-slate-950 text-slate-300 border-slate-800'
-                                }`}>
-                                  {crux.category || 'Olfactory Inquiry'}
-                                </span>
-
-                                {/* Season Tag */}
-                                {crux.season && crux.season !== 'All Season' && (
-                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-800">
-                                    {crux.season === 'Summer' ? '☀️ Summer' : crux.season === 'Winter' ? '❄️ Winter' : crux.season}
-                                  </span>
-                                )}
-
-                                {/* Budget Tag */}
-                                {crux.budgetConstraint && (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                                    💵 {crux.budgetConstraint}
-                                  </span>
-                                )}
-
-                                {/* Clone / Reference DNA */}
-                                {crux.referenceDNA && (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
-                                    🧬 {crux.referenceDNA} DNA
-                                  </span>
-                                )}
-
-                                {/* Status */}
-                                {turn.status === 'rate_limited' ? (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800">
-                                    Quota Limit Hit
+                            {/* Session Header */}
+                            <div
+                              onClick={() => setExpandedSessionId(isExpanded ? null : thread.sessionId)}
+                              className="p-4 bg-slate-950/80 border-b border-slate-800/80 flex items-center justify-between flex-wrap gap-2 cursor-pointer select-none"
+                            >
+                              <div className="flex items-center gap-2.5 flex-wrap">
+                                {/* Multi-turn Journey Pill */}
+                                {thread.isMultiTurn ? (
+                                  <span className="text-[11px] font-bold font-mono px-2.5 py-0.5 rounded-md bg-indigo-950 text-indigo-300 border border-indigo-700 flex items-center gap-1.5 shadow-sm">
+                                    <GitBranch className="w-3.5 h-3.5 text-indigo-400" />
+                                    <span>🧵 {thread.totalTurns}-Turn Refinement Journey</span>
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] text-slate-500">
-                                    {turn.matchedCount} Recs Delivered
+                                  <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800 flex items-center gap-1">
+                                    <span>⚡ 1-Turn Direct Hit</span>
                                   </span>
                                 )}
+
+                                {/* Primary Archetype */}
+                                <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/50">
+                                  {thread.primaryCategory}
+                                </span>
+
+                                {/* Session ID identifier */}
+                                <span className="text-[11px] font-mono text-slate-500">
+                                  Session: <code className="text-slate-400">{thread.sessionId.slice(0, 18)}...</code>
+                                </span>
                               </div>
 
-                              <div className="flex items-center gap-2 text-slate-500 text-[11px]">
-                                <span>{getRelativeTime(turn.timestamp)}</span>
-                                <span className="text-amber-400 font-semibold hover:underline flex items-center gap-0.5">
-                                  <span>{isExpanded ? 'Collapse' : 'Expand Dossier'}</span>
+                              <div className="flex items-center gap-3 text-slate-500 text-xs font-mono">
+                                <span>{getRelativeTime(thread.startedAt)}</span>
+                                <span className="text-amber-400 font-bold hover:underline flex items-center gap-1">
+                                  <span>{isExpanded ? 'Collapse Session' : 'Expand Dossier'}</span>
                                   <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                                 </span>
                               </div>
                             </div>
 
-                            {/* The Real User Query */}
-                            <div className="space-y-1">
-                              <h4 className="text-sm md:text-base font-bold text-white leading-snug">
-                                &ldquo;{turn.query}&rdquo;
-                              </h4>
-                            </div>
-
-                            {/* Crux Diagnosis & Target Notes Box */}
-                            {(turn.tasteSummary || (crux.detectedNotes && crux.detectedNotes.length > 0)) && (
-                              <div className="bg-slate-950/70 p-3 rounded-lg border border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
-                                <div className="flex items-start gap-2 flex-1 min-w-0">
-                                  <span className="text-amber-400 font-bold uppercase tracking-wider text-[10px] shrink-0 mt-0.5">
-                                    Crux / Diagnosis:
-                                  </span>
-                                  <span className="text-slate-300 font-mono text-[11px] leading-relaxed">
-                                    {turn.tasteSummary || crux.diagnosis}
-                                  </span>
-                                </div>
-
-                                {crux.detectedNotes && crux.detectedNotes.length > 0 && (
-                                  <div className="flex items-center gap-1 shrink-0 flex-wrap">
-                                    {crux.detectedNotes.map((n, nIdx) => (
-                                      <span key={nIdx} className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400 capitalize">
-                                        {n}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Instant Delivered Perfumes Pill Strip (Visible Without Expanding!) */}
-                            {turn.matchedCards && turn.matchedCards.length > 0 && (
-                              <div className="pt-1 flex items-center gap-2 overflow-x-auto text-xs font-mono">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
-                                  Delivered:
-                                </span>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  {turn.matchedCards.slice(0, 4).map((c, cIdx) => (
-                                    <div
-                                      key={cIdx}
-                                      className="px-2.5 py-1 rounded-md bg-slate-950 border border-slate-800 flex items-center gap-1.5 shrink-0"
-                                    >
-                                      <span className="font-bold text-white text-[11px]">{c.name}</span>
-                                      <span className="text-[10px] text-amber-400 font-bold">
-                                        {c.match_score ? `${c.match_score}%` : ''}
-                                      </span>
-                                      <span className="text-[10px] text-emerald-400 font-semibold">
-                                        {c.community_price ? `₹${Number(c.community_price).toLocaleString()}` : ''}
-                                      </span>
+                            {/* Session Turns Chronological Journey Flow */}
+                            <div className="p-4 space-y-4 bg-slate-900/60">
+                              {thread.turns.map((turn, tIdx) => {
+                                const crux = turn.crux || {};
+                                return (
+                                  <div
+                                    key={turn.id}
+                                    className="relative pl-6 before:content-[''] before:absolute before:left-2 before:top-3 before:bottom-0 before:w-0.5 before:bg-slate-800 last:before:hidden space-y-2 pb-2"
+                                  >
+                                    {/* Timeline Marker */}
+                                    <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-slate-950 border-2 border-amber-400 flex items-center justify-center text-[9px] font-bold text-amber-400 font-mono shadow-sm">
+                                      {turn.turnNumber}
                                     </div>
-                                  ))}
-                                  {turn.matchedCards.length > 4 && (
-                                    <span className="text-[10px] text-slate-500 font-semibold">
-                                      +{turn.matchedCards.length - 4} more
+
+                                    {/* Turn Sub-Header */}
+                                    <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-slate-300 font-bold">
+                                          {turn.turnNumber === 1 ? 'Turn 1: Initial Customer Inquiry' : `Turn ${turn.turnNumber}: Preference Refinement`}
+                                        </span>
+                                        {crux.season && crux.season !== 'All Season' && (
+                                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-950 text-slate-300 border border-slate-800">
+                                            {crux.season === 'Summer' ? '☀️ Summer' : crux.season === 'Winter' ? '❄️ Winter' : crux.season}
+                                          </span>
+                                        )}
+                                        {crux.budgetConstraint && (
+                                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                            💵 {crux.budgetConstraint}
+                                          </span>
+                                        )}
+                                        {crux.referenceDNA && (
+                                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                                            🧬 {crux.referenceDNA}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[10px] text-slate-500">{getRelativeTime(turn.timestamp)}</span>
+                                    </div>
+
+                                    {/* User Prompt */}
+                                    <div className="text-sm font-bold text-white leading-snug bg-slate-950/70 p-3 rounded-lg border border-slate-800/80">
+                                      &ldquo;{turn.query}&rdquo;
+                                    </div>
+
+                                    {/* Crux Diagnosis */}
+                                    {turn.tasteSummary && (
+                                      <div className="text-xs text-slate-300 font-mono bg-slate-950/40 px-3 py-1.5 rounded border border-slate-800/50 flex items-start gap-1.5">
+                                        <span className="text-amber-400 font-bold text-[10px] uppercase shrink-0 mt-0.5">Crux:</span>
+                                        <span className="text-[11px] leading-relaxed">{turn.tasteSummary}</span>
+                                      </div>
+                                    )}
+
+                                    {/* SEMANTIC VECTOR SEARCH FIRED */}
+                                    <div className="bg-gradient-to-r from-indigo-950/60 to-slate-950 p-2.5 rounded-lg border border-indigo-800/40 text-xs font-mono space-y-1">
+                                      <div className="flex items-center justify-between text-[10px]">
+                                        <span className="font-bold text-indigo-300 flex items-center gap-1.5">
+                                          <Search className="w-3 h-3 text-indigo-400" />
+                                          <span>SEMANTIC VECTOR SEARCH FIRED:</span>
+                                        </span>
+                                        <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                          turn.isStoredSemantic
+                                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                            : 'bg-slate-900 text-slate-400 border border-slate-800'
+                                        }`}>
+                                          {turn.isStoredSemantic ? '✓ Exact Prompt Stored' : '⚡ Reconstructed Profile'}
+                                        </span>
+                                      </div>
+                                      <div className="text-[11px] text-indigo-200 font-medium pl-3 border-l-2 border-indigo-500 py-0.5">
+                                        &ldquo;{turn.semanticSearchPrompt}&rdquo;
+                                      </div>
+                                    </div>
+
+                                    {/* Delivered Perfumes Strip */}
+                                    {turn.matchedCards && turn.matchedCards.length > 0 && (
+                                      <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-mono pt-1">
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
+                                          Delivered ({turn.matchedCards.length}):
+                                        </span>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          {turn.matchedCards.slice(0, 4).map((c, cIdx) => (
+                                            <span
+                                              key={cIdx}
+                                              className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px] font-bold text-white flex items-center gap-1.5 shrink-0"
+                                            >
+                                              <span>{c.name}</span>
+                                              {c.match_score && <span className="text-amber-400 text-[9px]">{c.match_score}%</span>}
+                                              {c.community_price && <span className="text-emerald-400 text-[9px]">₹{c.community_price}</span>}
+                                            </span>
+                                          ))}
+                                          {turn.matchedCards.length > 4 && (
+                                            <span className="text-[10px] text-slate-500">+{turn.matchedCards.length - 4} more</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Expanded Turn Details inside Session */}
+                                    {isExpanded && (
+                                      <div className="mt-3 p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
+                                        <div className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed font-sans">
+                                          <span className="text-amber-400 font-bold font-mono text-[11px] block mb-1">
+                                            Khushboo's Sommelier Response (Turn {turn.turnNumber}):
+                                          </span>
+                                          {turn.reply}
+                                        </div>
+
+                                        {turn.matchedCards && turn.matchedCards.length > 0 && (
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+                                            {turn.matchedCards.map((c, cIdx) => (
+                                              <div key={cIdx} className="p-2.5 rounded bg-slate-900 border border-slate-800 text-xs flex flex-col justify-between">
+                                                <div>
+                                                  <div className="flex justify-between items-center text-[10px] text-slate-400 mb-0.5">
+                                                    <span className="uppercase font-bold">{c.brand}</span>
+                                                    {c.match_score && <span className="text-amber-400 font-bold">{c.match_score}% Match</span>}
+                                                  </div>
+                                                  <div className="font-bold text-white truncate text-[11px]">{c.name}</div>
+                                                  {c.why && <div className="text-[10px] text-slate-300 italic mt-1 line-clamp-2">&ldquo;{c.why}&rdquo;</div>}
+                                                </div>
+                                                <div className="mt-2 pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px]">
+                                                  <span className="text-emerald-400 font-bold">
+                                                    {c.community_price ? `₹${Number(c.community_price).toLocaleString()}` : (c.lowest_decant_price ? `Decant ₹${c.lowest_decant_price}` : 'In Stock')}
+                                                  </span>
+                                                  <span className="text-slate-500 truncate max-w-[100px]">{c.best_seller || 'Verified Sellers'}</span>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+
+                {/* ============================================================== */}
+                {/* VIEW 2: INDIVIDUAL QUERY FEED (PROMPT BY PROMPT)               */}
+                {/* ============================================================== */}
+                {khushbooViewMode === 'turns' && (
+                  <div className="space-y-4">
+                    {filteredKhushbooTurns.length === 0 ? (
+                      <div className="text-center py-12 bg-slate-900/40 rounded-xl border border-slate-800 p-6 text-slate-400 text-xs font-mono">
+                        No customer queries match your selected crux filters.
+                      </div>
+                    ) : (
+                      filteredKhushbooTurns.map((turn) => {
+                        const isExpanded = expandedTurnId === turn.id;
+                        const crux = turn.crux || {};
+
+                        return (
+                          <div
+                            key={turn.id}
+                            className={`rounded-xl border transition-all overflow-hidden ${
+                              isExpanded
+                                ? 'bg-slate-900 border-amber-500/50 shadow-2xl'
+                                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            {/* Card Summary Header */}
+                            <div
+                              onClick={() => setExpandedTurnId(isExpanded ? null : turn.id)}
+                              className="p-4 cursor-pointer select-none space-y-3"
+                            >
+                              {/* Top Badges & Crux Tags */}
+                              <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {/* Turn Number & Conversation Context */}
+                                  {turn.isMultiTurn ? (
+                                    <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700 flex items-center gap-1">
+                                      <GitBranch className="w-3 h-3 text-indigo-400" />
+                                      <span>Turn {turn.turnNumber} of {turn.totalSessionTurns} {turn.isRefinement ? '(Refinement)' : '(Initial)'}</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
+                                      Single-Turn
+                                    </span>
+                                  )}
+
+                                  {/* Archetype Badge */}
+                                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                                    crux.category === 'Aquatic & Watery' ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800' :
+                                    crux.category === 'Citrus & High-Heat Fresh' ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800' :
+                                    crux.category === 'Sweet & Gourmand' ? 'bg-amber-950/80 text-amber-300 border-amber-800' :
+                                    crux.category === 'Cozy Winter & Boozy' ? 'bg-orange-950/80 text-orange-300 border-orange-800' :
+                                    crux.category === 'Office & Clean Daily' ? 'bg-blue-950/80 text-blue-300 border-blue-800' :
+                                    crux.category === 'Dark Smoky & Leather' ? 'bg-purple-950/80 text-purple-300 border-purple-800' :
+                                    crux.category === 'Iris & Seductive Evening' ? 'bg-rose-950/80 text-rose-300 border-rose-800' :
+                                    'bg-slate-950 text-slate-300 border-slate-800'
+                                  }`}>
+                                    {crux.category || 'Olfactory Inquiry'}
+                                  </span>
+
+                                  {/* Season Tag */}
+                                  {crux.season && crux.season !== 'All Season' && (
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-800">
+                                      {crux.season === 'Summer' ? '☀️ Summer' : crux.season === 'Winter' ? '❄️ Winter' : crux.season}
+                                    </span>
+                                  )}
+
+                                  {/* Budget Tag */}
+                                  {crux.budgetConstraint && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                      💵 {crux.budgetConstraint}
+                                    </span>
+                                  )}
+
+                                  {/* Clone / Reference DNA */}
+                                  {crux.referenceDNA && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                                      🧬 {crux.referenceDNA} DNA
+                                    </span>
+                                  )}
+
+                                  {/* Status */}
+                                  {turn.status === 'rate_limited' ? (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800">
+                                      Quota Limit Hit
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-500">
+                                      {turn.matchedCount} Recs Delivered
                                     </span>
                                   )}
                                 </div>
-                              </div>
-                            )}
-                          </div>
 
-                          {/* Expanded Full Dossier & Dialogue Details */}
-                          {isExpanded && (
-                            <div className="p-4 pt-2 border-t border-slate-800/80 space-y-4 bg-slate-950/60">
-                              
-                              {/* Assistant Text Response */}
-                              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-start gap-3">
-                                <div className="w-7 h-7 rounded-lg bg-amber-950/80 border border-amber-500/40 flex items-center justify-center shrink-0 mt-0.5">
-                                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                                </div>
-                                <div className="space-y-1 flex-1">
-                                  <div className="text-xs font-bold text-amber-400 flex items-center justify-between">
-                                    <span>Khushboo's Sommelier Response:</span>
-                                    <span className="text-[10px] font-mono text-slate-500">Session {turn.sessionId}</span>
-                                  </div>
-                                  <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
-                                    {turn.reply || '(No assistant text reply logged)'}
-                                  </p>
+                                <div className="flex items-center gap-2 text-slate-500 text-[11px]">
+                                  <span>{getRelativeTime(turn.timestamp)}</span>
+                                  <span className="text-amber-400 font-semibold hover:underline flex items-center gap-0.5">
+                                    <span>{isExpanded ? 'Collapse' : 'Expand Dossier'}</span>
+                                    <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                  </span>
                                 </div>
                               </div>
 
-                              {/* All Recommendations Detailed Cards */}
-                              {turn.matchedCards && turn.matchedCards.length > 0 ? (
-                                <div className="space-y-2.5">
-                                  <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
-                                    <span>All {turn.matchedCards.length} Recommendations Delivered to Shopper:</span>
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {turn.matchedCards.map((c, cIdx) => (
-                                      <div
-                                        key={c.id || cIdx}
-                                        className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between space-y-2 hover:border-slate-700 transition"
-                                      >
-                                        <div>
-                                          <div className="flex items-center justify-between text-[11px] mb-1">
-                                            <span className="font-bold text-slate-400 uppercase">{c.brand}</span>
-                                            {c.match_score && (
-                                              <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-1.5 py-0.2 rounded">
-                                                {c.match_score}% Match
-                                              </span>
-                                            )}
-                                          </div>
-                                          <h5 className="font-bold text-xs text-white truncate">{c.name}</h5>
-                                          
-                                          {c.why && (
-                                            <p className="text-[11px] text-slate-300 mt-1.5 line-clamp-3 leading-relaxed italic bg-slate-900/50 p-2 rounded border border-slate-800/60">
-                                              &ldquo;{c.why}&rdquo;
-                                            </p>
-                                          )}
-
-                                          {/* Accords preview */}
-                                          {c.accords && c.accords.length > 0 && (
-                                            <div className="flex items-center gap-1 mt-2 flex-wrap">
-                                              {c.accords.slice(0, 3).map((a, aIdx) => (
-                                                <span key={aIdx} className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-900 text-slate-400 border border-slate-800">
-                                                  {a.name}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-xs font-mono">
-                                          <div>
-                                            <span className="text-emerald-400 font-bold">
-                                              {c.community_price ? `₹${Number(c.community_price).toLocaleString()}` : (c.lowest_decant_price ? `Decant ₹${c.lowest_decant_price}` : 'In Stock')}
-                                            </span>
-                                          </div>
-                                          <span className="text-[10px] text-slate-500 font-medium truncate max-w-[120px]">
-                                            {c.best_seller || 'Verified Sellers'}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              ) : turn.matchedIds && turn.matchedIds.length > 0 ? (
-                                <div className="space-y-2">
-                                  <div className="text-xs font-bold text-emerald-400">
-                                    {turn.matchedIds.length} Perfume IDs Returned:
-                                  </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {turn.matchedIds.map((id, idx) => (
-                                      <span
-                                        key={idx}
-                                        className="text-xs font-mono px-2 py-1 rounded bg-slate-950 border border-slate-800 text-slate-300"
-                                      >
-                                        {id}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              {/* Follow-up Prompts Generated */}
-                              {turn.suggestions && turn.suggestions.length > 0 && (
-                                <div className="pt-2 border-t border-slate-800/60">
-                                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                                    Follow-up Prompts Suggested to User:
-                                  </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {turn.suggestions.map((s, sIdx) => (
-                                      <span key={sIdx} className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
-                                        &ldquo;{s}&rdquo;
-                                      </span>
-                                    ))}
-                                  </div>
+                              {/* Previous Context Breadcrumb for Multi-Turn Dialogues */}
+                              {turn.previousQuery && (
+                                <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5 pl-2 border-l-2 border-amber-400/40 bg-slate-950/40 py-1 rounded-r">
+                                  <CornerDownRight className="w-3 h-3 text-amber-400 shrink-0" />
+                                  <span className="text-slate-500 shrink-0">Previous Turn:</span>
+                                  <span className="truncate italic text-slate-300">&ldquo;{turn.previousQuery}&rdquo;</span>
                                 </div>
                               )}
 
+                              {/* The Real User Query */}
+                              <div className="space-y-1">
+                                <h4 className="text-sm md:text-base font-bold text-white leading-snug">
+                                  &ldquo;{turn.query}&rdquo;
+                                </h4>
+                              </div>
+
+                              {/* Crux Diagnosis & Target Notes Box */}
+                              {(turn.tasteSummary || (crux.detectedNotes && crux.detectedNotes.length > 0)) && (
+                                <div className="bg-slate-950/70 p-3 rounded-lg border border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
+                                  <div className="flex items-start gap-2 flex-1 min-w-0">
+                                    <span className="text-amber-400 font-bold uppercase tracking-wider text-[10px] shrink-0 mt-0.5">
+                                      Crux / Diagnosis:
+                                    </span>
+                                    <span className="text-slate-300 font-mono text-[11px] leading-relaxed">
+                                      {turn.tasteSummary || crux.diagnosis}
+                                    </span>
+                                  </div>
+
+                                  {crux.detectedNotes && crux.detectedNotes.length > 0 && (
+                                    <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                                      {crux.detectedNotes.map((n, nIdx) => (
+                                        <span key={nIdx} className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400 capitalize">
+                                          {n}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* SEMANTIC VECTOR SEARCH FIRED */}
+                              <div className="bg-gradient-to-r from-indigo-950/60 to-slate-950 p-2.5 rounded-lg border border-indigo-800/40 text-xs font-mono space-y-1">
+                                <div className="flex items-center justify-between text-[10px]">
+                                  <span className="font-bold text-indigo-300 flex items-center gap-1.5">
+                                    <Search className="w-3 h-3 text-indigo-400" />
+                                    <span>SEMANTIC VECTOR SEARCH FIRED:</span>
+                                  </span>
+                                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                    turn.isStoredSemantic
+                                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                      : 'bg-slate-900 text-slate-400 border border-slate-800'
+                                  }`}>
+                                    {turn.isStoredSemantic ? '✓ Exact Prompt Stored' : '⚡ Reconstructed Profile'}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-indigo-200 font-medium pl-3 border-l-2 border-indigo-500 py-0.5">
+                                  &ldquo;{turn.semanticSearchPrompt}&rdquo;
+                                </div>
+                              </div>
+
+                              {/* Instant Delivered Perfumes Pill Strip (Visible Without Expanding!) */}
+                              {turn.matchedCards && turn.matchedCards.length > 0 && (
+                                <div className="pt-1 flex items-center gap-2 overflow-x-auto text-xs font-mono">
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
+                                    Delivered:
+                                  </span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {turn.matchedCards.slice(0, 4).map((c, cIdx) => (
+                                      <div
+                                        key={cIdx}
+                                        className="px-2.5 py-1 rounded-md bg-slate-950 border border-slate-800 flex items-center gap-1.5 shrink-0"
+                                      >
+                                        <span className="font-bold text-white text-[11px]">{c.name}</span>
+                                        <span className="text-[10px] text-amber-400 font-bold">
+                                          {c.match_score ? `${c.match_score}%` : ''}
+                                        </span>
+                                        <span className="text-[10px] text-emerald-400 font-semibold">
+                                          {c.community_price ? `₹${Number(c.community_price).toLocaleString()}` : ''}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {turn.matchedCards.length > 4 && (
+                                      <span className="text-[10px] text-slate-500 font-semibold">
+                                        +{turn.matchedCards.length - 4} more
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+
+                            {/* Expanded Full Dossier & Dialogue Details */}
+                            {isExpanded && (
+                              <div className="p-4 pt-2 border-t border-slate-800/80 space-y-4 bg-slate-950/60">
+                                
+                                {/* Assistant Text Response */}
+                                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-start gap-3">
+                                  <div className="w-7 h-7 rounded-lg bg-amber-950/80 border border-amber-500/40 flex items-center justify-center shrink-0 mt-0.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                  </div>
+                                  <div className="space-y-1 flex-1">
+                                    <div className="text-xs font-bold text-amber-400 flex items-center justify-between">
+                                      <span>Khushboo's Sommelier Response:</span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setKhushbooSearch(turn.sessionId);
+                                          setKhushbooViewMode('threads');
+                                        }}
+                                        className="text-[10px] font-mono text-indigo-400 hover:text-indigo-300 underline"
+                                      >
+                                        View Full Conversation Thread
+                                      </button>
+                                    </div>
+                                    <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
+                                      {turn.reply || '(No assistant text reply logged)'}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* All Recommendations Detailed Cards */}
+                                {turn.matchedCards && turn.matchedCards.length > 0 ? (
+                                  <div className="space-y-2.5">
+                                    <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                                      <span>All {turn.matchedCards.length} Recommendations Delivered to Shopper:</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                      {turn.matchedCards.map((c, cIdx) => (
+                                        <div
+                                          key={c.id || cIdx}
+                                          className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between space-y-2 hover:border-slate-700 transition"
+                                        >
+                                          <div>
+                                            <div className="flex items-center justify-between text-[11px] mb-1">
+                                              <span className="font-bold text-slate-400 uppercase">{c.brand}</span>
+                                              {c.match_score && (
+                                                <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-1.5 py-0.2 rounded">
+                                                  {c.match_score}% Match
+                                                </span>
+                                              )}
+                                            </div>
+                                            <h5 className="font-bold text-xs text-white truncate">{c.name}</h5>
+                                            
+                                            {c.why && (
+                                              <p className="text-[11px] text-slate-300 mt-1.5 line-clamp-3 leading-relaxed italic bg-slate-900/50 p-2 rounded border border-slate-800/60">
+                                                &ldquo;{c.why}&rdquo;
+                                              </p>
+                                            )}
+
+                                            {/* Accords preview */}
+                                            {c.accords && c.accords.length > 0 && (
+                                              <div className="flex items-center gap-1 mt-2 flex-wrap">
+                                                {c.accords.slice(0, 3).map((a, aIdx) => (
+                                                  <span key={aIdx} className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                                                    {a.name}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-xs font-mono">
+                                            <div>
+                                              <span className="text-emerald-400 font-bold">
+                                                {c.community_price ? `₹${Number(c.community_price).toLocaleString()}` : (c.lowest_decant_price ? `Decant ₹${c.lowest_decant_price}` : 'In Stock')}
+                                              </span>
+                                            </div>
+                                            <span className="text-[10px] text-slate-500 font-medium truncate max-w-[120px]">
+                                              {c.best_seller || 'Verified Sellers'}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : turn.matchedIds && turn.matchedIds.length > 0 ? (
+                                  <div className="space-y-2">
+                                    <div className="text-xs font-bold text-emerald-400">
+                                      {turn.matchedIds.length} Perfume IDs Returned:
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {turn.matchedIds.map((id, idx) => (
+                                        <span
+                                          key={idx}
+                                          className="text-xs font-mono px-2 py-1 rounded bg-slate-950 border border-slate-800 text-slate-300"
+                                        >
+                                          {id}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
+
+                                {/* Follow-up Prompts Generated */}
+                                {turn.suggestions && turn.suggestions.length > 0 && (
+                                  <div className="pt-2 border-t border-slate-800/60">
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                                      Follow-up Prompts Suggested to User:
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {turn.suggestions.map((s, sIdx) => (
+                                        <span key={sIdx} className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                                          &ldquo;{s}&rdquo;
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

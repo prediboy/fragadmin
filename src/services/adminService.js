@@ -517,6 +517,7 @@ export function computeKhushbooAnalytics(rawChatMessages = [], { preset = '7d', 
   });
 
   const dialogTurns = [];
+  const conversationThreads = [];
   let totalMatchesSum = 0;
   let queriesWithMatchesCount = 0;
   let rateLimitedCount = 0;
@@ -525,8 +526,15 @@ export function computeKhushbooAnalytics(rawChatMessages = [], { preset = '7d', 
   const stopWords = new Set(["i", "me", "my", "myself", "we", "our", "you", "your", "he", "she", "it", "they", "what", "which", "who", "whom", "this", "that", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now", "like", "love", "want", "need", "give", "looking", "recommend", "perfume", "perfumes", "fragrance", "fragrances"]);
 
   sessionMap.forEach((msgs, sessionId) => {
+    const userMsgs = msgs.filter(m => m.role === 'user');
+    const totalSessionTurns = userMsgs.length;
+    const threadTurns = [];
+    let turnIndex = 0;
+    let prevUserQuery = null;
+
     for (let i = 0; i < msgs.length; i++) {
       if (msgs[i].role === 'user') {
+        turnIndex++;
         const u = msgs[i];
         const a = msgs.slice(i + 1).find(m => m.role === 'assistant');
 
@@ -619,14 +627,32 @@ export function computeKhushbooAnalytics(rawChatMessages = [], { preset = '7d', 
         else if (/ysl y|fakhar/i.test(qLower)) referenceDNA = 'YSL Y';
         else if (/tygar/i.test(qLower)) referenceDNA = 'Bvlgari Tygar';
 
-        dialogTurns.push({
+        // 6. Semantic Vector Search Query (Stored or Reconstructed)
+        const storedSemanticPrompt = matchedCards[0]?._semantic_search_prompt || null;
+        const semanticSearchPrompt = storedSemanticPrompt || [
+          category !== 'General Discovery' ? category : '',
+          season !== 'All Season' ? season : '',
+          detectedNotes.join(' '),
+          referenceDNA ? `inspired by ${referenceDNA}` : '',
+          budgetConstraint ? budgetConstraint : '',
+          a?.taste_summary || u.content
+        ].filter(Boolean).join(' ').trim();
+
+        const turnObj = {
           id: u.id,
           sessionId,
+          turnNumber: turnIndex,
+          totalSessionTurns,
+          isMultiTurn: totalSessionTurns > 1,
+          isRefinement: turnIndex > 1,
+          previousQuery: prevUserQuery,
           timestamp: u.created_at,
           query: u.content || '',
           reply: a?.content || '',
           intent: a?.intent || u.intent || 'chat',
           tasteSummary: a?.taste_summary || '',
+          semanticSearchPrompt,
+          isStoredSemantic: Boolean(storedSemanticPrompt),
           crux: {
             category,
             categoryColor,
@@ -641,13 +667,34 @@ export function computeKhushbooAnalytics(rawChatMessages = [], { preset = '7d', 
           matchedCards: matchedCards,
           suggestions: a?.suggestions || [],
           status: isRateLimit ? 'rate_limited' : (matchCount > 0 ? 'success' : 'conversational')
-        });
+        };
+
+        dialogTurns.push(turnObj);
+        threadTurns.push(turnObj);
+        prevUserQuery = u.content;
       }
+    }
+
+    if (threadTurns.length > 0) {
+      conversationThreads.push({
+        sessionId,
+        startedAt: msgs[0].created_at,
+        lastActiveAt: msgs[msgs.length - 1].created_at,
+        totalTurns: threadTurns.length,
+        isMultiTurn: threadTurns.length > 1,
+        primaryCategory: threadTurns[0]?.crux?.category || 'General',
+        cruxSummary: threadTurns[threadTurns.length - 1]?.tasteSummary || threadTurns[0]?.tasteSummary || '',
+        turns: threadTurns,
+        finalRecommendations: threadTurns[threadTurns.length - 1]?.matchedCards || []
+      });
     }
   });
 
   // Sort turns newest first
   dialogTurns.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  // Sort conversation threads newest first
+  conversationThreads.sort((a, b) => new Date(b.lastActiveAt) - new Date(a.lastActiveAt));
 
   // Category Distribution & Crux Metrics
   const categoryCounts = new Map();
@@ -716,6 +763,8 @@ export function computeKhushbooAnalytics(rawChatMessages = [], { preset = '7d', 
     topDNAs,
     topNotes,
     topTopics,
-    dialogTurns
+    dialogTurns,
+    conversationThreads,
+    multiTurnSessionsCount: conversationThreads.filter(t => t.isMultiTurn).length
   };
 }
