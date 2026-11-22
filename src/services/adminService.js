@@ -131,6 +131,15 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
   let totalSearches = 0;
   let totalAiProfiles = 0;
   let totalZeroResults = 0;
+  let totalFilterEvents = 0;
+
+  const filterBrandsMap = new Map();
+  const filterSellersMap = new Map();
+  const filterFormatsMap = new Map();
+  const filterTabsMap = new Map();
+  const filterDnasMap = new Map();
+  const filterVibesMap = new Map();
+  const filterBudgets = [];
 
   let totalGrossPipeline = 0;
   let totalBottleGmv = 0;
@@ -157,6 +166,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     }
     if (type === 'search') dayVelocityMap[dayKey].searches++;
     if (type === 'card') dayVelocityMap[dayKey].cardOpens++;
+    if (type === 'filter') dayVelocityMap[dayKey].filters = (dayVelocityMap[dayKey].filters || 0) + 1;
     if (type === 'convert_bottle') {
       dayVelocityMap[dayKey].converts++;
       dayVelocityMap[dayKey].bottles++;
@@ -203,6 +213,51 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
           sq.zeroResults++;
           totalZeroResults++;
         }
+      }
+    }
+    // EVENT: Catalog Filter Applied by Shopper
+    else if (title === 'EVENT:filter_applied') {
+      totalFilterEvents++;
+      addDayVelocity(createdAt, 'filter');
+      sess.filterEvents = sess.filterEvents || [];
+      sess.filterEvents.push(payload);
+
+      liveClickStream.push({
+        id: `filter_${createdAt}_${Math.random()}`,
+        timestamp: createdAt,
+        type: 'filter_applied',
+        name: payload.summary || r.umbrella_season?.split('|')?.[0] || 'Catalog Filter',
+        brand: payload.brand || 'All Brands',
+        format: Array.isArray(payload.formats) ? payload.formats.join(', ') : (payload.formats || 'any'),
+        price: payload.max_budget || null,
+        seller: payload.seller || null,
+        sessionId: sId,
+        source: payload.source || 'direct',
+        resultsCount: payload.results_count || 0
+      });
+
+      if (payload.brand && payload.brand !== 'all') {
+        filterBrandsMap.set(payload.brand, (filterBrandsMap.get(payload.brand) || 0) + 1);
+      }
+      if (payload.seller && payload.seller !== 'all') {
+        filterSellersMap.set(payload.seller, (filterSellersMap.get(payload.seller) || 0) + 1);
+      }
+      if (Array.isArray(payload.formats)) {
+        payload.formats.forEach(f => {
+          filterFormatsMap.set(f, (filterFormatsMap.get(f) || 0) + 1);
+        });
+      }
+      if (payload.quick_tab && payload.quick_tab !== 'all') {
+        filterTabsMap.set(payload.quick_tab, (filterTabsMap.get(payload.quick_tab) || 0) + 1);
+      }
+      if (payload.dna) {
+        filterDnasMap.set(payload.dna, (filterDnasMap.get(payload.dna) || 0) + 1);
+      }
+      if (payload.vibe) {
+        filterVibesMap.set(payload.vibe, (filterVibesMap.get(payload.vibe) || 0) + 1);
+      }
+      if (payload.max_budget && Number(payload.max_budget) < 15000) {
+        filterBudgets.push(Number(payload.max_budget));
       }
     }
     // AI Curated Umbrellas & Taste Profiles
@@ -403,7 +458,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
       eventsCount: filteredRows.length
     },
     kpis: {
-      totalClicks: totalCardClicks + totalWhatsAppClicks + totalSearches,
+      totalClicks: totalCardClicks + totalWhatsAppClicks + totalSearches + totalFilterEvents,
       totalWhatsAppConverts: totalWhatsAppClicks,
       totalBottleConverts,
       totalDecantConverts,
@@ -417,7 +472,8 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
       decantGmv: totalDecantGmv,
       avgAov: totalWhatsAppClicks > 0 ? Math.round(totalGrossPipeline / totalWhatsAppClicks) : 0,
       totalCardClicks,
-      totalSearches
+      totalSearches,
+      totalFilterEvents
     },
     aiInteraction: {
       totalQueries: totalSearches,
@@ -449,6 +505,16 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
       avgDecantAov: totalDecantConverts > 0 ? Math.round(totalDecantGmv / totalDecantConverts) : 0,
       topBottles,
       topDecants
+    },
+    catalogFilters: {
+      totalFilterEvents,
+      topBrands: Array.from(filterBrandsMap.entries()).map(([brand, count]) => ({ brand, count })).sort((a, b) => b.count - a.count).slice(0, 10),
+      topSellers: Array.from(filterSellersMap.entries()).map(([seller, count]) => ({ seller, count })).sort((a, b) => b.count - a.count).slice(0, 10),
+      topFormats: Array.from(filterFormatsMap.entries()).map(([format, count]) => ({ format, count })).sort((a, b) => b.count - a.count),
+      topTabs: Array.from(filterTabsMap.entries()).map(([tab, count]) => ({ tab, count })).sort((a, b) => b.count - a.count),
+      topDnas: Array.from(filterDnasMap.entries()).map(([dna, count]) => ({ dna, count })).sort((a, b) => b.count - a.count).slice(0, 10),
+      topVibes: Array.from(filterVibesMap.entries()).map(([vibe, count]) => ({ vibe, count })).sort((a, b) => b.count - a.count).slice(0, 10),
+      avgBudget: filterBudgets.length > 0 ? Math.round(filterBudgets.reduce((a, b) => a + b, 0) / filterBudgets.length) : null
     },
     dailyVelocity,
     liveClickStream: liveClickStream.slice(0, 100)

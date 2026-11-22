@@ -2037,14 +2037,97 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
             {/* TAB 4: CHRONOLOGICAL LIVE CLICK STREAM                         */}
             {/* ============================================================== */}
             {activeTab === 'live_stream' && (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 
+                {/* Shopper Catalog Filter Demand Radar */}
+                <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-cyan-400" />
+                        Live Catalog Filter Demand Radar
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Telemetry capturing what sellers, brands, formats, budgets, and scent vibes shoppers filter by in real-time
+                      </p>
+                    </div>
+                    <div className="text-xs font-mono px-2.5 py-1 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800 flex items-center gap-1.5 self-start sm:self-auto">
+                      <Activity className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                      <span>{analytics?.catalogFilters?.totalFilterEvents || 0} Filter Events Logged</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Top Filtered Brands */}
+                    <div className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800/80 space-y-2">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Top Filtered Brands</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(analytics?.catalogFilters?.topBrands || []).length > 0 ? (
+                          analytics.catalogFilters.topBrands.slice(0, 5).map((b, idx) => (
+                            <span key={idx} className="text-xs font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-200 border border-slate-800 flex items-center gap-1">
+                              <span>{b.brand}</span>
+                              <span className="text-amber-400 font-bold text-[10px]">({b.count})</span>
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-500 font-mono">Listening for brand filters...</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Top Filtered Sellers */}
+                    <div className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800/80 space-y-2">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Top Filtered Sellers</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(analytics?.catalogFilters?.topSellers || []).length > 0 ? (
+                          analytics.catalogFilters.topSellers.slice(0, 5).map((s, idx) => (
+                            <span key={idx} className="text-xs font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-200 border border-slate-800 flex items-center gap-1">
+                              <span>{s.seller}</span>
+                              <span className="text-emerald-400 font-bold text-[10px]">({s.count})</span>
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-500 font-mono">Listening for seller filters...</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Top Formats & Tabs */}
+                    <div className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800/80 space-y-2">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Top Formats & Tabs</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(analytics?.catalogFilters?.topFormats || []).concat(analytics?.catalogFilters?.topTabs || []).length > 0 ? (
+                          (analytics?.catalogFilters?.topFormats || []).concat(analytics?.catalogFilters?.topTabs || []).slice(0, 5).map((f, idx) => (
+                            <span key={idx} className="text-xs font-mono px-2 py-0.5 rounded bg-slate-900 text-indigo-300 border border-slate-800 flex items-center gap-1">
+                              <span>{f.format || f.tab}</span>
+                              <span className="text-indigo-400 font-bold text-[10px]">({f.count})</span>
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-500 font-mono">Listening for format toggles...</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Budget & Price Constraints */}
+                    <div className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800/80 space-y-2">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Avg Shopper Budget Limit</div>
+                      <div className="text-2xl font-black text-white font-mono">
+                        {analytics?.catalogFilters?.avgBudget ? `₹${analytics.catalogFilters.avgBudget.toLocaleString()}` : 'No Hard Cap'}
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-mono">
+                        Computed across active budget sliders set by buyers.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-5">
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h3 className="text-sm font-bold text-white flex items-center gap-2">
                         <Activity className="w-4 h-4 text-emerald-400" />
-                        Live Click & Convert Stream ({analytics.timeframe.label})
+                        Live Click, Convert & Filter Stream ({analytics.timeframe.label})
                       </h3>
                       <p className="text-xs text-slate-400 mt-0.5">
                         Click column headers to sort by event type, price, seller, traffic source, or timestamp
@@ -2064,7 +2147,7 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                             onSort={handleSortStream}
                           />
                           <SortableTh
-                            label="Fragrance"
+                            label="Fragrance / Filter Target"
                             sortKey="name"
                             currentKey={streamSortKey}
                             order={streamSortOrder}
@@ -2078,7 +2161,7 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                             onSort={handleSortStream}
                           />
                           <SortableTh
-                            label="Quoted Price"
+                            label="Quoted / Budget"
                             sortKey="price"
                             currentKey={streamSortKey}
                             order={streamSortOrder}
@@ -2116,6 +2199,11 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">
                                   <MessageCircle className="w-3 h-3" />
                                   WHATSAPP BUY
+                                </span>
+                              ) : ev.type === 'filter_applied' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[10px]">
+                                  <Filter className="w-3 h-3 text-cyan-400" />
+                                  FILTER APPLIED
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-[10px]">
