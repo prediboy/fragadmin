@@ -15,6 +15,32 @@ import {
   getDateBoundaries
 } from '../services/adminService.js';
 
+// Helper for filter category styling and icons
+function getFilterCategoryBadge(cat) {
+  switch (cat) {
+    case 'Format':
+      return { bg: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30', icon: Droplets };
+    case 'Brand':
+      return { bg: 'bg-amber-500/10 text-amber-400 border-amber-500/30', icon: Tag };
+    case 'Seller':
+      return { bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', icon: ShoppingBag };
+    case 'Quick Tab':
+      return { bg: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30', icon: Zap };
+    case 'Deal Lens':
+      return { bg: 'bg-rose-500/10 text-rose-400 border-rose-500/30', icon: Flame };
+    case 'Budget Limit':
+      return { bg: 'bg-purple-500/10 text-purple-400 border-purple-500/30', icon: DollarSign };
+    case 'DNA Profile':
+      return { bg: 'bg-blue-500/10 text-blue-400 border-blue-500/30', icon: Compass };
+    case 'Scent Vibe':
+      return { bg: 'bg-teal-500/10 text-teal-400 border-teal-500/30', icon: Sun };
+    case 'Sort Order':
+      return { bg: 'bg-slate-500/10 text-slate-400 border-slate-500/30', icon: ArrowUpDown };
+    default:
+      return { bg: 'bg-slate-500/10 text-slate-400 border-slate-500/30', icon: Filter };
+  }
+}
+
 // Reusable Sortable Column Header Component
 function SortableTh({ label, sortKey, currentKey, order, onSort, align = 'left', className = '' }) {
   const isActive = currentKey === sortKey;
@@ -115,6 +141,12 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
   // Table 4: Live Click Stream Sorting
   const [streamSortKey, setStreamSortKey] = useState('timestamp');
   const [streamSortOrder, setStreamSortOrder] = useState('desc');
+
+  // Table 5: Catalog Filters & Demand Sorting & Filtering
+  const [filterSortKey, setFilterSortKey] = useState('count');
+  const [filterSortOrder, setFilterSortOrder] = useState('desc');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterSearch, setFilterSearch] = useState('');
 
   // Initial Load
   const loadLogs = async (force = false) => {
@@ -335,6 +367,36 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
     if (!analytics?.liveClickStream) return [];
     return genericSort(analytics.liveClickStream, streamSortKey, streamSortOrder);
   }, [analytics, streamSortKey, streamSortOrder]);
+
+  const handleSortFilters = (key) => {
+    if (filterSortKey === key) {
+      setFilterSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setFilterSortKey(key);
+      setFilterSortOrder(key === 'name' || key === 'category' ? 'asc' : 'desc');
+    }
+  };
+
+  // Filtered and Sorted Catalog Filters Breakdown
+  const filteredAndSortedFilters = useMemo(() => {
+    const list = analytics?.catalogFilters?.allFiltersList || [];
+    let result = [...list];
+
+    if (filterCategory !== 'all') {
+      result = result.filter(f => f.category.toLowerCase() === filterCategory.toLowerCase());
+    }
+
+    if (filterSearch.trim()) {
+      const q = filterSearch.trim().toLowerCase();
+      result = result.filter(f =>
+        (f.name || '').toLowerCase().includes(q) ||
+        (f.value || '').toLowerCase().includes(q) ||
+        (f.category || '').toLowerCase().includes(q)
+      );
+    }
+
+    return genericSort(result, filterSortKey, filterSortOrder);
+  }, [analytics?.catalogFilters?.allFiltersList, filterCategory, filterSearch, filterSortKey, filterSortOrder]);
 
   const kpis = analytics?.kpis;
   const ai = analytics?.aiInteraction;
@@ -614,6 +676,23 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
               activeTab === 'decant_vs_retail' ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-300'
             }`}>
               {kpis?.totalWhatsAppConverts || 0} total
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('catalog_filters')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap ${
+              activeTab === 'catalog_filters'
+                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Filter className="w-4 h-4 text-cyan-400" />
+            Catalog Filters & Demand
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              activeTab === 'catalog_filters' ? 'bg-cyan-700 text-white' : 'bg-slate-800 text-slate-300'
+            }`}>
+              {analytics?.catalogFilters?.allFiltersList?.length || 0} Filters
             </span>
           </button>
 
@@ -2034,6 +2113,286 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
             )}
 
             {/* ============================================================== */}
+            {/* TAB 5: CATALOG FILTERS DEMAND & USAGE FREQUENCY                */}
+            {/* ============================================================== */}
+            {activeTab === 'catalog_filters' && (
+              <div className="space-y-6">
+                
+                {/* 1. Filter Demand Overview KPI Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-4 space-y-1">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Total Filter Invocations</div>
+                    <div className="text-xl font-mono font-bold text-white flex items-center gap-1.5">
+                      <Filter className="w-4 h-4 text-cyan-400" />
+                      <span>{analytics?.catalogFilters?.totalFilterEvents || 0}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono">Filter changes logged</div>
+                  </div>
+
+                  <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-4 space-y-1">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Unique Criteria</div>
+                    <div className="text-xl font-mono font-bold text-cyan-300">
+                      {analytics?.catalogFilters?.allFiltersList?.length || 0}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono">Distinct filters applied</div>
+                  </div>
+
+                  <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-4 space-y-1">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Top Format</div>
+                    <div className="text-sm font-bold text-indigo-300 truncate font-mono">
+                      {analytics?.catalogFilters?.topFormats?.[0]?.format || 'Decants'}
+                    </div>
+                    <div className="text-[10px] text-indigo-400 font-mono font-bold">
+                      {analytics?.catalogFilters?.topFormats?.[0]?.count ? `${analytics.catalogFilters.topFormats[0].count} uses` : 'None yet'}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-4 space-y-1">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Top Brand</div>
+                    <div className="text-sm font-bold text-amber-300 truncate font-mono">
+                      {analytics?.catalogFilters?.topBrands?.[0]?.brand || 'None'}
+                    </div>
+                    <div className="text-[10px] text-amber-400 font-mono font-bold">
+                      {analytics?.catalogFilters?.topBrands?.[0]?.count ? `${analytics.catalogFilters.topBrands[0].count} uses` : 'None yet'}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-4 space-y-1">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Top Seller</div>
+                    <div className="text-sm font-bold text-emerald-300 truncate font-mono">
+                      {analytics?.catalogFilters?.topSellers?.[0]?.seller || 'None'}
+                    </div>
+                    <div className="text-[10px] text-emerald-400 font-mono font-bold">
+                      {analytics?.catalogFilters?.topSellers?.[0]?.count ? `${analytics.catalogFilters.topSellers[0].count} uses` : 'None yet'}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-4 space-y-1">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Avg Budget Cap</div>
+                    <div className="text-sm font-bold text-purple-300 font-mono truncate">
+                      {analytics?.catalogFilters?.avgBudget ? `₹${analytics.catalogFilters.avgBudget.toLocaleString()}` : 'No Hard Cap'}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono">Active price limits</div>
+                  </div>
+                </div>
+
+                {/* 2. Main Filters Usage Frequency Table Card */}
+                <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-5 space-y-4">
+                  
+                  {/* Header Title & Subtitle */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                    <div>
+                      <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        <Filter className="w-5 h-5 text-cyan-400" />
+                        Catalog Filters & Number of Times Used ({analytics.timeframe.label})
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Exact count of every filter criterion shoppers applied (Format, Brand, Seller, Tab, Deal, Budget, Vibe, DNA), ranked by frequency of use. Click any column header to sort.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Search filters..."
+                          value={filterSearch}
+                          onChange={(e) => setFilterSearch(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg pl-8 pr-3 py-1.5 focus:outline-none focus:border-cyan-500 w-48 sm:w-60"
+                        />
+                        {filterSearch && (
+                          <button
+                            onClick={() => setFilterSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Category Filter Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                    {[
+                      { id: 'all', label: 'All Filters', count: analytics?.catalogFilters?.allFiltersList?.length || 0 },
+                      { id: 'format', label: 'Formats', count: (analytics?.catalogFilters?.allFiltersList || []).filter(f => f.category === 'Format').length },
+                      { id: 'brand', label: 'Brands', count: (analytics?.catalogFilters?.allFiltersList || []).filter(f => f.category === 'Brand').length },
+                      { id: 'seller', label: 'Sellers', count: (analytics?.catalogFilters?.allFiltersList || []).filter(f => f.category === 'Seller').length },
+                      { id: 'quick tab', label: 'Quick Tabs', count: (analytics?.catalogFilters?.allFiltersList || []).filter(f => f.category === 'Quick Tab').length },
+                      { id: 'deal lens', label: 'Deals & Lenses', count: (analytics?.catalogFilters?.allFiltersList || []).filter(f => f.category === 'Deal Lens').length },
+                      { id: 'budget limit', label: 'Budget Limits', count: (analytics?.catalogFilters?.allFiltersList || []).filter(f => f.category === 'Budget Limit').length },
+                      { id: 'dna profile', label: 'DNA Profiles', count: (analytics?.catalogFilters?.allFiltersList || []).filter(f => f.category === 'DNA Profile').length },
+                      { id: 'scent vibe', label: 'Scent Vibes', count: (analytics?.catalogFilters?.allFiltersList || []).filter(f => f.category === 'Scent Vibe').length },
+                      { id: 'sort order', label: 'Sort Orders', count: (analytics?.catalogFilters?.allFiltersList || []).filter(f => f.category === 'Sort Order').length },
+                    ].filter(tab => tab.id === 'all' || tab.count > 0).map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setFilterCategory(tab.id)}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                          filterCategory === tab.id
+                            ? 'bg-cyan-600 text-white shadow-sm shadow-cyan-600/30'
+                            : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                          filterCategory === tab.id ? 'bg-cyan-800 text-white' : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {tab.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Filters Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-950/80 border-b border-slate-800">
+                          <SortableTh
+                            label="Filter Name & Criteria"
+                            sortKey="name"
+                            currentKey={filterSortKey}
+                            order={filterSortOrder}
+                            onSort={handleSortFilters}
+                          />
+                          <SortableTh
+                            label="Category"
+                            sortKey="category"
+                            currentKey={filterSortKey}
+                            order={filterSortOrder}
+                            onSort={handleSortFilters}
+                          />
+                          <SortableTh
+                            label="Times Used"
+                            sortKey="count"
+                            currentKey={filterSortKey}
+                            order={filterSortOrder}
+                            onSort={handleSortFilters}
+                            align="center"
+                          />
+                          <SortableTh
+                            label="Unique Shoppers"
+                            sortKey="sessionsCount"
+                            currentKey={filterSortKey}
+                            order={filterSortOrder}
+                            onSort={handleSortFilters}
+                            align="center"
+                          />
+                          <SortableTh
+                            label="% of Total Filters"
+                            sortKey="percentOfTotal"
+                            currentKey={filterSortKey}
+                            order={filterSortOrder}
+                            onSort={handleSortFilters}
+                            align="right"
+                          />
+                          <SortableTh
+                            label="Avg Inventory Matches"
+                            sortKey="avgResults"
+                            currentKey={filterSortKey}
+                            order={filterSortOrder}
+                            onSort={handleSortFilters}
+                            align="right"
+                          />
+                          <SortableTh
+                            label="Last Applied"
+                            sortKey="lastUsed"
+                            currentKey={filterSortKey}
+                            order={filterSortOrder}
+                            onSort={handleSortFilters}
+                            align="right"
+                          />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-mono">
+                        {filteredAndSortedFilters.length > 0 ? (
+                          filteredAndSortedFilters.map((f, idx) => {
+                            const badge = getFilterCategoryBadge(f.category);
+                            const IconComponent = badge.icon;
+                            const maxCount = analytics?.catalogFilters?.allFiltersList?.[0]?.count || 1;
+                            const barWidth = Math.max(8, Math.round((f.count / maxCount) * 100));
+
+                            return (
+                              <tr key={f.id || idx} className="hover:bg-slate-800/40 transition">
+                                <td className="py-3 px-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-md bg-slate-950 border border-slate-800 text-slate-500 flex items-center justify-center text-[10px] font-bold">
+                                      {idx + 1}
+                                    </span>
+                                    <div>
+                                      <div className="font-sans font-bold text-slate-100 text-xs flex items-center gap-1.5">
+                                        <span>{f.name}</span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 font-mono">
+                                        target: {f.value}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                <td className="py-3 px-3">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${badge.bg}`}>
+                                    <IconComponent className="w-3 h-3" />
+                                    <span>{f.category}</span>
+                                  </span>
+                                </td>
+
+                                <td className="py-3 px-3 text-center">
+                                  <div className="inline-flex flex-col items-center">
+                                    <span className="text-sm font-bold text-cyan-400">
+                                      {f.count.toLocaleString()}
+                                    </span>
+                                    <div className="w-16 h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
+                                      <div
+                                        className="h-full bg-cyan-500 rounded-full"
+                                        style={{ width: `${barWidth}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </td>
+
+                                <td className="py-3 px-3 text-center text-slate-300 font-medium">
+                                  {f.sessionsCount} sessions
+                                </td>
+
+                                <td className="py-3 px-3 text-right">
+                                  <span className="font-bold text-slate-200">
+                                    {f.percentOfTotal}%
+                                  </span>
+                                </td>
+
+                                <td className="py-3 px-3 text-right">
+                                  <span className="text-slate-400">
+                                    {f.avgResults.toLocaleString()} items
+                                  </span>
+                                </td>
+
+                                <td className="py-3 px-3 text-right text-[11px] text-slate-400">
+                                  {getRelativeTime(f.lastUsed)}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="py-12 text-center text-slate-500 text-xs">
+                              No filter events matching "{filterSearch}" in {analytics.timeframe.label}.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                </div>
+
+              </div>
+            )}
+
+            {/* ============================================================== */}
             {/* TAB 4: CHRONOLOGICAL LIVE CLICK STREAM                         */}
             {/* ============================================================== */}
             {activeTab === 'live_stream' && (
@@ -2051,9 +2410,19 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                         Telemetry capturing what sellers, brands, formats, budgets, and scent vibes shoppers filter by in real-time
                       </p>
                     </div>
-                    <div className="text-xs font-mono px-2.5 py-1 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800 flex items-center gap-1.5 self-start sm:self-auto">
-                      <Activity className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-                      <span>{analytics?.catalogFilters?.totalFilterEvents || 0} Filter Events Logged</span>
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <button
+                        onClick={() => setActiveTab('catalog_filters')}
+                        className="text-xs font-mono px-2.5 py-1 rounded bg-cyan-900/60 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/80 transition flex items-center gap-1 cursor-pointer"
+                        title="View complete sortable filters frequency breakdown"
+                      >
+                        <span>View Filters Breakdown</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                      <div className="text-xs font-mono px-2.5 py-1 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800 flex items-center gap-1.5">
+                        <Activity className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                        <span>{analytics?.catalogFilters?.totalFilterEvents || 0} Events</span>
+                      </div>
                     </div>
                   </div>
 

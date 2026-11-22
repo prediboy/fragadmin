@@ -140,6 +140,33 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
   const filterDnasMap = new Map();
   const filterVibesMap = new Map();
   const filterBudgets = [];
+  const allFiltersMap = new Map();
+
+  const trackFilter = (category, value, label, sId, createdAt, resultsCount) => {
+    if (!value || value === 'all') return;
+    const key = `${category}:${value}`;
+    if (!allFiltersMap.has(key)) {
+      allFiltersMap.set(key, {
+        id: key,
+        category,
+        value,
+        name: label || value,
+        count: 0,
+        sessions: new Set(),
+        totalResults: 0,
+        lastUsed: createdAt
+      });
+    }
+    const item = allFiltersMap.get(key);
+    item.count++;
+    if (sId) item.sessions.add(sId);
+    if (resultsCount !== undefined && resultsCount !== null) {
+      item.totalResults += Number(resultsCount) || 0;
+    }
+    if (!item.lastUsed || new Date(createdAt) > new Date(item.lastUsed)) {
+      item.lastUsed = createdAt;
+    }
+  };
 
   let totalGrossPipeline = 0;
   let totalBottleGmv = 0;
@@ -237,27 +264,45 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
       });
 
       if (payload.brand && payload.brand !== 'all') {
+        trackFilter('Brand', payload.brand, payload.brand, sId, createdAt, payload.results_count);
         filterBrandsMap.set(payload.brand, (filterBrandsMap.get(payload.brand) || 0) + 1);
       }
       if (payload.seller && payload.seller !== 'all') {
+        trackFilter('Seller', payload.seller, payload.seller, sId, createdAt, payload.results_count);
         filterSellersMap.set(payload.seller, (filterSellersMap.get(payload.seller) || 0) + 1);
       }
       if (Array.isArray(payload.formats)) {
         payload.formats.forEach(f => {
+          const formatLabel = f === 'decant' ? 'Decants Ready' : (f === 'tester' ? 'Testers' : (f === 'partial' ? 'Partials' : 'Retail Bottles'));
+          trackFilter('Format', f, formatLabel, sId, createdAt, payload.results_count);
           filterFormatsMap.set(f, (filterFormatsMap.get(f) || 0) + 1);
         });
       }
       if (payload.quick_tab && payload.quick_tab !== 'all') {
+        const tabLabel = payload.quick_tab === 'decants' ? 'Decants Ready' : (payload.quick_tab === 'drops' ? 'Price Drops' : (payload.quick_tab === 'preferred' ? 'Most Preferred' : (payload.quick_tab === 'testers' ? 'Testers' : (payload.quick_tab === 'partials' ? 'Partials' : payload.quick_tab))));
+        trackFilter('Quick Tab', payload.quick_tab, tabLabel, sId, createdAt, payload.results_count);
         filterTabsMap.set(payload.quick_tab, (filterTabsMap.get(payload.quick_tab) || 0) + 1);
       }
+      if (payload.deals_only) {
+        const dealLabel = payload.deals_only === 'drops' ? 'Price Drops (Arbitrage)' : (payload.deals_only === 'preferred' ? 'Most Preferred' : (payload.deals_only === 'new' ? 'New Arrivals' : payload.deals_only));
+        trackFilter('Deal Lens', payload.deals_only, dealLabel, sId, createdAt, payload.results_count);
+      }
       if (payload.dna) {
+        trackFilter('DNA Profile', payload.dna, `DNA: ${payload.dna}`, sId, createdAt, payload.results_count);
         filterDnasMap.set(payload.dna, (filterDnasMap.get(payload.dna) || 0) + 1);
       }
       if (payload.vibe) {
+        trackFilter('Scent Vibe', payload.vibe, `Vibe: ${payload.vibe}`, sId, createdAt, payload.results_count);
         filterVibesMap.set(payload.vibe, (filterVibesMap.get(payload.vibe) || 0) + 1);
       }
       if (payload.max_budget && Number(payload.max_budget) < 15000) {
-        filterBudgets.push(Number(payload.max_budget));
+        const bVal = Number(payload.max_budget);
+        trackFilter('Budget Limit', `< ₹${bVal.toLocaleString()}`, `Under ₹${bVal.toLocaleString()}`, sId, createdAt, payload.results_count);
+        filterBudgets.push(bVal);
+      }
+      if (payload.sort_by && payload.sort_by !== 'price_asc') {
+        const sortLabel = payload.sort_by === 'price_desc' ? 'Price: High to Low' : (payload.sort_by === 'rating_desc' ? 'Highest Rating' : (payload.sort_by === 'rating_count' ? 'Most Reviews' : payload.sort_by));
+        trackFilter('Sort Order', payload.sort_by, sortLabel, sId, createdAt, payload.results_count);
       }
     }
     // AI Curated Umbrellas & Taste Profiles
@@ -508,6 +553,17 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     },
     catalogFilters: {
       totalFilterEvents,
+      allFiltersList: Array.from(allFiltersMap.values()).map(f => ({
+        id: f.id,
+        category: f.category,
+        value: f.value,
+        name: f.name,
+        count: f.count,
+        sessionsCount: f.sessions.size,
+        percentOfTotal: totalFilterEvents > 0 ? Number(((f.count / totalFilterEvents) * 100).toFixed(1)) : 0,
+        avgResults: f.count > 0 ? Math.round(f.totalResults / f.count) : 0,
+        lastUsed: f.lastUsed
+      })).sort((a, b) => b.count - a.count),
       topBrands: Array.from(filterBrandsMap.entries()).map(([brand, count]) => ({ brand, count })).sort((a, b) => b.count - a.count).slice(0, 10),
       topSellers: Array.from(filterSellersMap.entries()).map(([seller, count]) => ({ seller, count })).sort((a, b) => b.count - a.count).slice(0, 10),
       topFormats: Array.from(filterFormatsMap.entries()).map(([format, count]) => ({ format, count })).sort((a, b) => b.count - a.count),
