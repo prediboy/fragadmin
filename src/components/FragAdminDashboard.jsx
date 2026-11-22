@@ -4,7 +4,8 @@ import {
   Users, ShoppingBag, Eye, Award, CheckCircle2, AlertCircle, Zap,
   Tag, MessageCircle, BarChart2, Layers, DollarSign, Package,
   Search, ExternalLink, RefreshCw, Sparkles, ChevronRight, Check, X,
-  TrendingUp, MousePointer, HelpCircle, Bot, Compass, Send, Phone
+  TrendingUp, MousePointer, HelpCircle, Bot, Compass, Send, Phone,
+  Droplets, Sun, Flame, Briefcase
 } from 'lucide-react';
 import {
   fetchAllTelemetryLogs,
@@ -154,7 +155,7 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
     return { ...clickData, khushboo: khushbooData };
   }, [rawLogs, rawChatLogs, datePreset, customStart, customEnd]);
 
-  // Filtered Ask Khushboo Dialogues
+  // Filtered Ask Khushboo Dialogues & Crux
   const filteredKhushbooTurns = useMemo(() => {
     const turns = analytics?.khushboo?.dialogTurns || [];
     return turns.filter(t => {
@@ -162,13 +163,28 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
       if (khushbooFilter === 'rate_limited' && t.status !== 'rate_limited') return false;
       if (khushbooFilter === 'conversational' && (t.matchedCount > 0 || t.status === 'rate_limited')) return false;
 
+      // Crux archetype & category filters
+      if (khushbooFilter === 'aquatic' && t.crux?.category !== 'Aquatic & Watery') return false;
+      if (khushbooFilter === 'citrus' && t.crux?.category !== 'Citrus & High-Heat Fresh') return false;
+      if (khushbooFilter === 'gourmand' && t.crux?.category !== 'Sweet & Gourmand' && t.crux?.category !== 'Cozy Winter & Boozy') return false;
+      if (khushbooFilter === 'budget' && !t.crux?.budgetConstraint) return false;
+      if (khushbooFilter === 'clones' && t.crux?.category !== 'Clone & DNA Seeker' && !t.crux?.referenceDNA) return false;
+      if (khushbooFilter === 'office' && t.crux?.category !== 'Office & Clean Daily') return false;
+      if (khushbooFilter === 'dark' && t.crux?.category !== 'Dark Smoky & Leather') return false;
+      if (khushbooFilter === 'zero_matches' && (t.matchedCount > 0 && t.status !== 'rate_limited')) return false;
+
       if (khushbooSearch.trim()) {
         const q = khushbooSearch.toLowerCase();
         const inQuery = (t.query || '').toLowerCase().includes(q);
         const inReply = (t.reply || '').toLowerCase().includes(q);
         const inSummary = (t.tasteSummary || '').toLowerCase().includes(q);
-        const inMatches = (t.matchedIds || []).some(id => id.toLowerCase().includes(q));
-        if (!inQuery && !inReply && !inSummary && !inMatches) return false;
+        const inCategory = (t.crux?.category || '').toLowerCase().includes(q);
+        const inDNA = (t.crux?.referenceDNA || '').toLowerCase().includes(q);
+        const inBudget = (t.crux?.budgetConstraint || '').toLowerCase().includes(q);
+        const inSeason = (t.crux?.season || '').toLowerCase().includes(q);
+        const inNotes = (t.crux?.detectedNotes || []).some(n => n.toLowerCase().includes(q));
+        const inMatches = (t.matchedCards || []).some(c => (c.name || '').toLowerCase().includes(q) || (c.brand || '').toLowerCase().includes(q));
+        if (!inQuery && !inReply && !inSummary && !inCategory && !inDNA && !inBudget && !inSeason && !inNotes && !inMatches) return false;
       }
 
       return true;
@@ -508,12 +524,12 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
             onClick={() => setActiveTab('khushboo')}
             className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap ${
               activeTab === 'khushboo'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
+                ? 'bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 shadow-md shadow-amber-500/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
           >
             <Sparkles className={`w-4 h-4 ${activeTab === 'khushboo' ? 'text-slate-950 fill-slate-950/20' : 'text-amber-400'}`} />
-            Ask Khushboo Queries
+            AI Query Intelligence & Crux
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
               activeTab === 'khushboo' ? 'bg-slate-950 text-amber-300' : 'bg-slate-800 text-slate-300'
             }`}>
@@ -783,101 +799,170 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
             )}
 
             {/* ============================================================== */}
-            {/* TAB: ASK KHUSHBOO INTELLIGENCE & CONVERSATIONAL QUERIES       */}
+            {/* TAB: AI QUERY INTELLIGENCE & CRUX RADAR                      */}
             {/* ============================================================== */}
             {activeTab === 'khushboo' && (
               <div className="space-y-6">
                 
-                {/* 4 Summary KPI Cards */}
+                {/* 4 Executive Crux KPIs */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   
                   {/* 1. Total User Prompts */}
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-amber-950/40 to-slate-900 border border-amber-500/20">
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-amber-950/40 to-slate-900 border border-amber-500/20 shadow-lg">
                     <div className="flex items-center justify-between text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">
-                      <span>Total Prompts Asked</span>
+                      <span>AI Consultations</span>
                       <Sparkles className="w-4 h-4 text-amber-400" />
                     </div>
                     <div className="text-3xl font-black text-white">{analytics?.khushboo?.totalUserQueries || 0}</div>
                     <p className="text-xs text-slate-400 mt-1">
-                      Questions asked to Khushboo in {analytics?.timeframe?.label}.
+                      Prompts across <span className="text-amber-300 font-bold">{analytics?.khushboo?.uniqueSessions || 0}</span> shopper sessions in {analytics?.timeframe?.label}.
                     </p>
                   </div>
 
-                  {/* 2. Avg Recommendations Returned */}
+                  {/* 2. Dominant Scent Demand Crux */}
+                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <div className="flex items-center justify-between text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2">
+                      <span>Top Demand Archetype</span>
+                      <Droplets className="w-4 h-4 text-cyan-400" />
+                    </div>
+                    <div className="text-xl font-black text-white truncate">
+                      {analytics?.khushboo?.categoryDistribution?.[0]?.category || 'Aquatic & Fresh'}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      <span className="text-cyan-400 font-bold">{analytics?.khushboo?.categoryDistribution?.[0]?.percent || 0}%</span> of total customer inquiries.
+                    </p>
+                  </div>
+
+                  {/* 3. Budget-Constrained Inquiries */}
                   <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
                     <div className="flex items-center justify-between text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">
-                      <span>Avg Recs Returned</span>
-                      <Package className="w-4 h-4 text-emerald-400" />
+                      <span>Price-Gated Queries</span>
+                      <DollarSign className="w-4 h-4 text-emerald-400" />
                     </div>
-                    <div className="text-3xl font-black text-white">{analytics?.khushboo?.avgMatchesPerQuery || 0}</div>
+                    <div className="text-3xl font-black text-white">
+                      {analytics?.khushboo?.budgetPercent || 0}%
+                    </div>
                     <p className="text-xs text-slate-400 mt-1">
-                      Perfumes returned per query ({analytics?.khushboo?.queriesWithMatchesCount || 0} queries gave recs)
+                      <span className="text-emerald-400 font-bold">{analytics?.khushboo?.budgetConstrainedCount || 0} queries</span> specified hard budget limits (e.g. &lt;₹2.5k).
                     </p>
                   </div>
 
-                  {/* 3. Unique Shopper Sessions */}
-                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-                    <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2">
-                      <span>Unique Shoppers</span>
-                      <Users className="w-4 h-4 text-indigo-400" />
-                    </div>
-                    <div className="text-3xl font-black text-white">{analytics?.khushboo?.uniqueSessions || 0}</div>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Distinct user sessions querying the AI Sommelier
-                    </p>
-                  </div>
-
-                  {/* 4. Success vs Rate Limit */}
+                  {/* 4. Recommendation Delivery Rate */}
                   <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
                     <div className="flex items-center justify-between text-xs font-bold text-purple-400 uppercase tracking-wider mb-2">
-                      <span>Success Delivery Rate</span>
-                      <CheckCircle2 className="w-4 h-4 text-purple-400" />
+                      <span>Fulfillment Depth</span>
+                      <Package className="w-4 h-4 text-purple-400" />
                     </div>
-                    <div className="text-3xl font-black text-purple-400">{analytics?.khushboo?.successRate || 100}%</div>
+                    <div className="text-3xl font-black text-purple-400">{analytics?.khushboo?.avgMatchesPerQuery || 0}</div>
                     <p className="text-xs text-slate-400 mt-1">
-                      {analytics?.khushboo?.rateLimitedCount || 0} queries hit Gemini daily quota
+                      Avg verified perfumes returned per query ({analytics?.khushboo?.successRate || 100}% delivery).
                     </p>
                   </div>
 
                 </div>
 
-                {/* Top Topics & Fragrance Terms Asked */}
-                {(analytics?.khushboo?.topTopics?.length || 0) > 0 && (
-                  <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-4">
-                    <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
-                      <Tag className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Most Common Fragrance Names, Notes & Vibes Shoppers Ask For:</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {analytics.khushboo.topTopics.map((item, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setKhushbooSearch(item.word)}
-                          className={`text-xs font-mono px-2.5 py-1 rounded-lg border transition flex items-center gap-1.5 ${
-                            khushbooSearch.toLowerCase() === item.word.toLowerCase()
-                              ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
-                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
-                          }`}
-                        >
-                          <span className="capitalize">{item.word}</span>
-                          <span className="text-[10px] text-amber-400 font-bold bg-amber-950/80 px-1.5 py-0.2 rounded">
-                            {item.count}
-                          </span>
-                        </button>
-                      ))}
-                      {khushbooSearch && (
-                        <button
-                          onClick={() => setKhushbooSearch('')}
-                          className="text-xs font-mono px-2 py-1 rounded-lg bg-rose-950 text-rose-300 border border-rose-800 hover:bg-rose-900"
-                        >
-                          Clear Filter &times;
-                        </button>
-                      )}
+                {/* Scent Demand Radar & Crux Distribution Panel */}
+                <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-5 space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Compass className="w-4 h-4 text-amber-400" />
+                        Live Scent Demand Radar (The Crux of What Shoppers Want)
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Categorized breakdown of customer scent desires, requested clone DNAs, and primary notes
+                      </p>
                     </div>
                   </div>
-                )}
 
-                {/* Filter & Search Bar */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                    
+                    {/* Archetype Demand Breakdown */}
+                    <div className="space-y-2.5">
+                      <div className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Tag className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Demand by Olfactory Archetype:</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {(analytics?.khushboo?.categoryDistribution || []).slice(0, 6).map((cat, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => setKhushbooSearch(cat.category)}
+                            className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/80 hover:border-slate-700 cursor-pointer transition flex items-center justify-between text-xs font-mono"
+                          >
+                            <span className="text-slate-200 font-semibold truncate">{cat.category}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-amber-400 font-bold">{cat.count} ({cat.percent}%)</span>
+                              <div className="w-16 h-1.5 bg-slate-900 rounded-full overflow-hidden hidden sm:block">
+                                <div className="bg-amber-400 h-full" style={{ width: `${cat.percent}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Most Requested Fragrance DNAs / Clones */}
+                    <div className="space-y-2.5">
+                      <div className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Award className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Top Clone DNAs & Inspirations Asked:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(analytics?.khushboo?.topDNAs || []).length > 0 ? (
+                          analytics.khushboo.topDNAs.map((dna, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setKhushbooSearch(dna.dna)}
+                              className={`text-xs font-mono px-3 py-1.5 rounded-lg border transition flex items-center gap-1.5 ${
+                                khushbooSearch.toLowerCase() === dna.dna.toLowerCase()
+                                  ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
+                                  : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
+                              }`}
+                            >
+                              <span className="font-semibold">{dna.dna}</span>
+                              <span className="text-[10px] bg-slate-900 text-amber-400 px-1.5 py-0.2 rounded font-bold">
+                                {dna.count}
+                              </span>
+                            </button>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-500 font-mono">No specific clone DNAs mentioned in this period.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Top Desired Notes & Accords */}
+                    <div className="space-y-2.5">
+                      <div className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Most Demanded Scent Notes:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(analytics?.khushboo?.topNotes || []).length > 0 ? (
+                          analytics.khushboo.topNotes.map((note, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setKhushbooSearch(note.note)}
+                              className={`text-xs font-mono px-2.5 py-1 rounded-md border transition capitalize ${
+                                khushbooSearch.toLowerCase() === note.note.toLowerCase()
+                                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-bold'
+                                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                              }`}
+                            >
+                              {note.note} ({note.count})
+                            </button>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-500 font-mono">Exploring broad profiles.</span>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Filter & Crux Archetype Tabs */}
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
                   <div className="relative flex-1 max-w-md">
                     <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -885,7 +970,7 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                       type="text"
                       value={khushbooSearch}
                       onChange={(e) => setKhushbooSearch(e.target.value)}
-                      placeholder="Search prompts (e.g. Hawas, summer, mint, BDC, Ajmal)..."
+                      placeholder="Search query text, diagnosis, DNA, or perfume name..."
                       className="w-full pl-9 pr-8 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
                     />
                     {khushbooSearch && (
@@ -898,19 +983,24 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-mono">
+                  {/* Archetype Quick Filter Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-mono pb-1 sm:pb-0">
                     {[
                       { id: 'all', label: 'All Prompts' },
-                      { id: 'with_matches', label: 'With Recs' },
-                      { id: 'conversational', label: 'Chat Only' },
-                      { id: 'rate_limited', label: 'Quota Limit' }
+                      { id: 'aquatic', label: '🌊 Aquatic & Watery' },
+                      { id: 'gourmand', label: '🍫 Sweet & Cozy' },
+                      { id: 'budget', label: '💵 Budget-Capped' },
+                      { id: 'office', label: '👔 Office Clean' },
+                      { id: 'dark', label: '🌑 Dark & Smoky' },
+                      { id: 'clones', label: '🧬 Clone Hunters' },
+                      { id: 'zero_matches', label: '⚠️ Misses / Quota' }
                     ].map((f) => (
                       <button
                         key={f.id}
                         onClick={() => setKhushbooFilter(f.id)}
                         className={`px-3 py-1.5 rounded-lg border font-semibold transition whitespace-nowrap ${
                           khushbooFilter === f.id
-                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm font-bold'
                             : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                         }`}
                       >
@@ -920,140 +1010,225 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                   </div>
                 </div>
 
-                {/* Dialog Turns List */}
-                <div className="space-y-3">
+                {/* Dialog Turns & Crux Feed */}
+                <div className="space-y-4">
                   <div className="text-xs font-mono text-slate-400 flex items-center justify-between px-1">
-                    <span>Showing {filteredKhushbooTurns.length} user queries in {analytics?.timeframe?.label}</span>
-                    <span>Click any query to view full conversation & returned perfumes</span>
+                    <span>Showing <strong className="text-white">{filteredKhushbooTurns.length}</strong> shopper queries in {analytics?.timeframe?.label}</span>
+                    <span>Click any card to reveal full conversation & sommelier dossier</span>
                   </div>
 
                   {filteredKhushbooTurns.length === 0 ? (
                     <div className="text-center py-12 bg-slate-900/40 rounded-xl border border-slate-800 p-6 text-slate-400 text-xs font-mono">
-                      No Ask Khushboo queries match your filters for this timeframe.
+                      No customer queries match your selected crux filters.
                     </div>
                   ) : (
                     filteredKhushbooTurns.map((turn) => {
                       const isExpanded = expandedTurnId === turn.id;
+                      const crux = turn.crux || {};
+
                       return (
                         <div
                           key={turn.id}
                           className={`rounded-xl border transition-all overflow-hidden ${
                             isExpanded
-                              ? 'bg-slate-900 border-amber-500/50 shadow-xl'
-                              : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+                              ? 'bg-slate-900 border-amber-500/50 shadow-2xl'
+                              : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
                           }`}
                         >
-                          {/* Row Header */}
+                          {/* Card Summary Header */}
                           <div
                             onClick={() => setExpandedTurnId(isExpanded ? null : turn.id)}
-                            className="p-4 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-3 select-none"
+                            className="p-4 cursor-pointer select-none space-y-3"
                           >
-                            <div className="flex items-start gap-3 flex-1 min-w-0">
-                              <div className="w-8 h-8 rounded-lg bg-indigo-950/80 border border-indigo-500/40 flex items-center justify-center shrink-0 mt-0.5">
-                                <Users className="w-4 h-4 text-indigo-400" />
+                            {/* Top Badges & Crux Tags */}
+                            <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {/* Archetype Badge */}
+                                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                                  crux.category === 'Aquatic & Watery' ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800' :
+                                  crux.category === 'Citrus & High-Heat Fresh' ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800' :
+                                  crux.category === 'Sweet & Gourmand' ? 'bg-amber-950/80 text-amber-300 border-amber-800' :
+                                  crux.category === 'Cozy Winter & Boozy' ? 'bg-orange-950/80 text-orange-300 border-orange-800' :
+                                  crux.category === 'Office & Clean Daily' ? 'bg-blue-950/80 text-blue-300 border-blue-800' :
+                                  crux.category === 'Dark Smoky & Leather' ? 'bg-purple-950/80 text-purple-300 border-purple-800' :
+                                  crux.category === 'Iris & Seductive Evening' ? 'bg-rose-950/80 text-rose-300 border-rose-800' :
+                                  'bg-slate-950 text-slate-300 border-slate-800'
+                                }`}>
+                                  {crux.category || 'Olfactory Inquiry'}
+                                </span>
+
+                                {/* Season Tag */}
+                                {crux.season && crux.season !== 'All Season' && (
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-800">
+                                    {crux.season === 'Summer' ? '☀️ Summer' : crux.season === 'Winter' ? '❄️ Winter' : crux.season}
+                                  </span>
+                                )}
+
+                                {/* Budget Tag */}
+                                {crux.budgetConstraint && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                    💵 {crux.budgetConstraint}
+                                  </span>
+                                )}
+
+                                {/* Clone / Reference DNA */}
+                                {crux.referenceDNA && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                                    🧬 {crux.referenceDNA} DNA
+                                  </span>
+                                )}
+
+                                {/* Status */}
+                                {turn.status === 'rate_limited' ? (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800">
+                                    Quota Limit Hit
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-500">
+                                    {turn.matchedCount} Recs Delivered
+                                  </span>
+                                )}
                               </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap mb-1">
-                                  <span className="text-[11px] font-mono text-slate-400">
-                                    {new Date(turn.timestamp).toLocaleString(undefined, {
-                                      month: 'short',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    })}
+
+                              <div className="flex items-center gap-2 text-slate-500 text-[11px]">
+                                <span>{getRelativeTime(turn.timestamp)}</span>
+                                <span className="text-amber-400 font-semibold hover:underline flex items-center gap-0.5">
+                                  <span>{isExpanded ? 'Collapse' : 'Expand Dossier'}</span>
+                                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* The Real User Query */}
+                            <div className="space-y-1">
+                              <h4 className="text-sm md:text-base font-bold text-white leading-snug">
+                                &ldquo;{turn.query}&rdquo;
+                              </h4>
+                            </div>
+
+                            {/* Crux Diagnosis & Target Notes Box */}
+                            {(turn.tasteSummary || (crux.detectedNotes && crux.detectedNotes.length > 0)) && (
+                              <div className="bg-slate-950/70 p-3 rounded-lg border border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
+                                <div className="flex items-start gap-2 flex-1 min-w-0">
+                                  <span className="text-amber-400 font-bold uppercase tracking-wider text-[10px] shrink-0 mt-0.5">
+                                    Crux / Diagnosis:
                                   </span>
-                                  <span className="text-[10px] font-mono text-slate-500 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                                    {turn.sessionId.slice(0, 16)}...
+                                  <span className="text-slate-300 font-mono text-[11px] leading-relaxed">
+                                    {turn.tasteSummary || crux.diagnosis}
                                   </span>
-                                  {turn.status === 'rate_limited' ? (
-                                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800">
-                                      Quota Limit Hit
-                                    </span>
-                                  ) : turn.matchedCount > 0 ? (
-                                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-700">
-                                      {turn.matchedCount} Perfumes Returned
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                                      Conversational
-                                    </span>
-                                  )}
-                                  {turn.intent && turn.intent !== 'chat' && (
-                                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
-                                      {turn.intent.replace('_', ' ')}
+                                </div>
+
+                                {crux.detectedNotes && crux.detectedNotes.length > 0 && (
+                                  <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                                    {crux.detectedNotes.map((n, nIdx) => (
+                                      <span key={nIdx} className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400 capitalize">
+                                        {n}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Instant Delivered Perfumes Pill Strip (Visible Without Expanding!) */}
+                            {turn.matchedCards && turn.matchedCards.length > 0 && (
+                              <div className="pt-1 flex items-center gap-2 overflow-x-auto text-xs font-mono">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
+                                  Delivered:
+                                </span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {turn.matchedCards.slice(0, 4).map((c, cIdx) => (
+                                    <div
+                                      key={cIdx}
+                                      className="px-2.5 py-1 rounded-md bg-slate-950 border border-slate-800 flex items-center gap-1.5 shrink-0"
+                                    >
+                                      <span className="font-bold text-white text-[11px]">{c.name}</span>
+                                      <span className="text-[10px] text-amber-400 font-bold">
+                                        {c.match_score ? `${c.match_score}%` : ''}
+                                      </span>
+                                      <span className="text-[10px] text-emerald-400 font-semibold">
+                                        {c.community_price ? `₹${Number(c.community_price).toLocaleString()}` : ''}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  {turn.matchedCards.length > 4 && (
+                                    <span className="text-[10px] text-slate-500 font-semibold">
+                                      +{turn.matchedCards.length - 4} more
                                     </span>
                                   )}
                                 </div>
-
-                                <h4 className="text-sm font-bold text-white leading-snug">
-                                  &ldquo;{turn.query}&rdquo;
-                                </h4>
-
-                                {turn.tasteSummary && (
-                                  <p className="text-xs text-amber-300/80 mt-1 line-clamp-1 font-mono">
-                                    Diagnosis: {turn.tasteSummary}
-                                  </p>
-                                )}
                               </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
-                              <span className="text-xs font-mono font-semibold text-amber-400 hover:underline flex items-center gap-1">
-                                <span>{isExpanded ? 'Hide Details' : 'View Dialogue & Matches'}</span>
-                                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                              </span>
-                            </div>
+                            )}
                           </div>
 
-                          {/* Expanded Details: Reply & Matched Perfumes */}
+                          {/* Expanded Full Dossier & Dialogue Details */}
                           {isExpanded && (
-                            <div className="p-4 pt-2 border-t border-slate-800/80 space-y-4 bg-slate-950/40">
+                            <div className="p-4 pt-2 border-t border-slate-800/80 space-y-4 bg-slate-950/60">
+                              
                               {/* Assistant Text Response */}
-                              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start gap-3">
+                              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-start gap-3">
                                 <div className="w-7 h-7 rounded-lg bg-amber-950/80 border border-amber-500/40 flex items-center justify-center shrink-0 mt-0.5">
                                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                                 </div>
                                 <div className="space-y-1 flex-1">
-                                  <div className="text-xs font-bold text-amber-400">Khushboo's Response:</div>
-                                  <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
+                                  <div className="text-xs font-bold text-amber-400 flex items-center justify-between">
+                                    <span>Khushboo's Sommelier Response:</span>
+                                    <span className="text-[10px] font-mono text-slate-500">Session {turn.sessionId}</span>
+                                  </div>
+                                  <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
                                     {turn.reply || '(No assistant text reply logged)'}
                                   </p>
                                 </div>
                               </div>
 
-                              {/* Matched Fragrances Delivered */}
+                              {/* All Recommendations Detailed Cards */}
                               {turn.matchedCards && turn.matchedCards.length > 0 ? (
-                                <div className="space-y-2">
+                                <div className="space-y-2.5">
                                   <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
-                                    <span>{turn.matchedCards.length} Recommendations Delivered to Shopper:</span>
+                                    <span>All {turn.matchedCards.length} Recommendations Delivered to Shopper:</span>
                                   </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                     {turn.matchedCards.map((c, cIdx) => (
                                       <div
                                         key={c.id || cIdx}
-                                        className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex flex-col justify-between"
+                                        className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between space-y-2 hover:border-slate-700 transition"
                                       >
                                         <div>
                                           <div className="flex items-center justify-between text-[11px] mb-1">
-                                            <span className="font-bold text-slate-400">{c.brand}</span>
+                                            <span className="font-bold text-slate-400 uppercase">{c.brand}</span>
                                             {c.match_score && (
-                                              <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-950/60 px-1.5 py-0.2 rounded">
+                                              <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-1.5 py-0.2 rounded">
                                                 {c.match_score}% Match
                                               </span>
                                             )}
                                           </div>
                                           <h5 className="font-bold text-xs text-white truncate">{c.name}</h5>
+                                          
                                           {c.why && (
-                                            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 italic">
-                                              "{c.why}"
+                                            <p className="text-[11px] text-slate-300 mt-1.5 line-clamp-3 leading-relaxed italic bg-slate-900/50 p-2 rounded border border-slate-800/60">
+                                              &ldquo;{c.why}&rdquo;
                                             </p>
                                           )}
+
+                                          {/* Accords preview */}
+                                          {c.accords && c.accords.length > 0 && (
+                                            <div className="flex items-center gap-1 mt-2 flex-wrap">
+                                              {c.accords.slice(0, 3).map((a, aIdx) => (
+                                                <span key={aIdx} className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                                                  {a.name}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          )}
                                         </div>
-                                        <div className="mt-2 pt-2 border-t border-slate-900 flex items-center justify-between text-xs font-mono">
-                                          <span className="text-emerald-400 font-bold">
-                                            {c.community_price ? `₹${Number(c.community_price).toLocaleString()}` : 'Check Rates'}
-                                          </span>
-                                          <span className="text-[10px] text-slate-500">
+
+                                        <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-xs font-mono">
+                                          <div>
+                                            <span className="text-emerald-400 font-bold">
+                                              {c.community_price ? `₹${Number(c.community_price).toLocaleString()}` : (c.lowest_decant_price ? `Decant ₹${c.lowest_decant_price}` : 'In Stock')}
+                                            </span>
+                                          </div>
+                                          <span className="text-[10px] text-slate-500 font-medium truncate max-w-[120px]">
                                             {c.best_seller || 'Verified Sellers'}
                                           </span>
                                         </div>
@@ -1078,6 +1253,23 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                                   </div>
                                 </div>
                               ) : null}
+
+                              {/* Follow-up Prompts Generated */}
+                              {turn.suggestions && turn.suggestions.length > 0 && (
+                                <div className="pt-2 border-t border-slate-800/60">
+                                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                                    Follow-up Prompts Suggested to User:
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {turn.suggestions.map((s, sIdx) => (
+                                      <span key={sIdx} className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                                        &ldquo;{s}&rdquo;
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
                             </div>
                           )}
                         </div>

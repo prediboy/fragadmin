@@ -549,6 +549,76 @@ export function computeKhushbooAnalytics(rawChatMessages = [], { preset = '7d', 
           }
         });
 
+        // --- STRUCTURED QUERY CRUX EXTRACTION ---
+        const qLower = (u.content || '').toLowerCase();
+
+        // 1. Category & Olfactory Archetype
+        let category = 'General Discovery';
+        let categoryColor = 'indigo';
+        if (/water|marine|aquatic|sea|beach|calone|ocean/i.test(qLower)) {
+          category = 'Aquatic & Watery';
+          categoryColor = 'cyan';
+        } else if (/citrus|lemon|bergamot|grapefruit|gym/i.test(qLower) && !/winter|cozy|vanilla/i.test(qLower)) {
+          category = 'Citrus & High-Heat Fresh';
+          categoryColor = 'emerald';
+        } else if (/vanilla|gourmand|sweet|caramel|dates|chocolate|coffee|tiramisu/i.test(qLower)) {
+          category = 'Sweet & Gourmand';
+          categoryColor = 'amber';
+        } else if (/winter|cold|cozy|boozy|rum|cognac|spiced/i.test(qLower)) {
+          category = 'Cozy Winter & Boozy';
+          categoryColor = 'orange';
+        } else if (/office|work|daily|barbershop|soapy|clean|lavender|fougere/i.test(qLower)) {
+          category = 'Office & Clean Daily';
+          categoryColor = 'blue';
+        } else if (/leather|tobacco|smoky|dark|mysterious|oud|ash/i.test(qLower)) {
+          category = 'Dark Smoky & Leather';
+          categoryColor = 'purple';
+        } else if (/iris|powdery|gentleman|luxury|date night/i.test(qLower)) {
+          category = 'Iris & Seductive Evening';
+          categoryColor = 'rose';
+        } else if (/blue|versatile|compliment/i.test(qLower)) {
+          category = 'Blue & Crowd Pleaser';
+          categoryColor = 'sky';
+        } else if (/clone|dupe|alternative|inspired/i.test(qLower)) {
+          category = 'Clone & DNA Seeker';
+          categoryColor = 'teal';
+        }
+
+        // 2. Budget Detection
+        let budgetConstraint = null;
+        const budgetMatch = qLower.match(/(?:under|below|budget|less than|max)\s*(?:rs\.?|inr|₹)?\s*(\d{3,5})/i) ||
+                            qLower.match(/(\d{3,5})\s*(?:rs\.?|inr|₹|budget|rupees)/i);
+        if (budgetMatch) {
+          budgetConstraint = `Under ₹${Number(budgetMatch[1]).toLocaleString()}`;
+        } else if (/cheap|budget|affordable|pocket friendly/i.test(qLower)) {
+          budgetConstraint = 'Budget-Conscious';
+        }
+
+        // 3. Season Detection
+        let season = 'All Season';
+        if (/summer|heat|hot/i.test(qLower)) season = 'Summer';
+        else if (/winter|cold/i.test(qLower)) season = 'Winter';
+        else if (/monsoon|rain/i.test(qLower)) season = 'Monsoon / Rain';
+        else if (/spring/i.test(qLower)) season = 'Spring';
+
+        // 4. Notes Extracted
+        const detectedNotes = [];
+        ['mint', 'lavender', 'marine', 'sea notes', 'citrus', 'lemon', 'bergamot', 'vanilla', 'coffee', 'chocolate', 'dates', 'iris', 'leather', 'tobacco', 'vetiver', 'oud', 'cinnamon', 'watermelon', 'ambergris', 'apple', 'pepper'].forEach(n => {
+          if (qLower.includes(n)) detectedNotes.push(n);
+        });
+
+        // 5. DNA / Reference Brand
+        let referenceDNA = null;
+        if (/bdc|bleu de chanel/i.test(qLower)) referenceDNA = 'Bleu de Chanel';
+        else if (/sauvage/i.test(qLower)) referenceDNA = 'Dior Sauvage';
+        else if (/aventus/i.test(qLower)) referenceDNA = 'Creed Aventus';
+        else if (/adg|profondo|acqua di gio/i.test(qLower)) referenceDNA = 'Acqua Di Gio';
+        else if (/angels share|khamrah/i.test(qLower)) referenceDNA = "Angels' Share";
+        else if (/hawas/i.test(qLower)) referenceDNA = 'Rasasi Hawas';
+        else if (/megamare/i.test(qLower)) referenceDNA = 'Orto Parisi Megamare';
+        else if (/ysl y|fakhar/i.test(qLower)) referenceDNA = 'YSL Y';
+        else if (/tygar/i.test(qLower)) referenceDNA = 'Bvlgari Tygar';
+
         dialogTurns.push({
           id: u.id,
           sessionId,
@@ -557,6 +627,15 @@ export function computeKhushbooAnalytics(rawChatMessages = [], { preset = '7d', 
           reply: a?.content || '',
           intent: a?.intent || u.intent || 'chat',
           tasteSummary: a?.taste_summary || '',
+          crux: {
+            category,
+            categoryColor,
+            season,
+            budgetConstraint,
+            detectedNotes,
+            referenceDNA,
+            diagnosis: a?.taste_summary || u.content || ''
+          },
           matchedIds: matches,
           matchedCount: matchCount,
           matchedCards: matchedCards,
@@ -569,6 +648,45 @@ export function computeKhushbooAnalytics(rawChatMessages = [], { preset = '7d', 
 
   // Sort turns newest first
   dialogTurns.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  // Category Distribution & Crux Metrics
+  const categoryCounts = new Map();
+  const dnaCounts = new Map();
+  const noteCounts = new Map();
+  let budgetConstrainedCount = 0;
+
+  dialogTurns.forEach(t => {
+    const cat = t.crux?.category || 'General';
+    categoryCounts.set(cat, (categoryCounts.get(cat) || 0) + 1);
+
+    if (t.crux?.budgetConstraint) budgetConstrainedCount++;
+
+    if (t.crux?.referenceDNA) {
+      dnaCounts.set(t.crux.referenceDNA, (dnaCounts.get(t.crux.referenceDNA) || 0) + 1);
+    }
+
+    (t.crux?.detectedNotes || []).forEach(n => {
+      noteCounts.set(n, (noteCounts.get(n) || 0) + 1);
+    });
+  });
+
+  const categoryDistribution = Array.from(categoryCounts.entries())
+    .map(([category, count]) => ({
+      category,
+      count,
+      percent: dialogTurns.length > 0 ? Number(((count / dialogTurns.length) * 100).toFixed(1)) : 0
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const topDNAs = Array.from(dnaCounts.entries())
+    .map(([dna, count]) => ({ dna, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+
+  const topNotes = Array.from(noteCounts.entries())
+    .map(([note, count]) => ({ note, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
 
   // Top topic keywords
   const topTopics = Array.from(wordFrequency.entries())
@@ -592,6 +710,11 @@ export function computeKhushbooAnalytics(rawChatMessages = [], { preset = '7d', 
     avgMatchesPerQuery,
     rateLimitedCount,
     successRate,
+    budgetConstrainedCount,
+    budgetPercent: totalUserQueries > 0 ? Number(((budgetConstrainedCount / totalUserQueries) * 100).toFixed(1)) : 0,
+    categoryDistribution,
+    topDNAs,
+    topNotes,
     topTopics,
     dialogTurns
   };
