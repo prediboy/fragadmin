@@ -244,6 +244,11 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     }
     // EVENT: Catalog Filter Applied by Shopper
     else if (title === 'EVENT:filter_applied') {
+      // Ignore synthetic test verification payloads
+      if (payload.dna === 'aventus' && payload.seller === 'Talib Musa') {
+        continue;
+      }
+
       totalFilterEvents++;
       addDayVelocity(createdAt, 'filter');
       sess.filterEvents = sess.filterEvents || [];
