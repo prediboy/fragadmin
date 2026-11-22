@@ -9,6 +9,8 @@ import {
 import {
   fetchAllTelemetryLogs,
   computeClickAnalytics,
+  fetchKhushbooChatLogs,
+  computeKhushbooAnalytics,
   getDateBoundaries
 } from '../services/adminService.js';
 
@@ -81,8 +83,14 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
   });
   const [customEnd, setCustomEnd] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Active Tab: 'sellers' | 'ai_interaction' | 'decant_vs_retail' | 'live_stream'
+  // Active Tab: 'sellers' | 'khushboo' | 'ai_interaction' | 'decant_vs_retail' | 'live_stream'
   const [activeTab, setActiveTab] = useState('sellers');
+
+  // Khushboo Chat Telemetry State
+  const [rawChatLogs, setRawChatLogs] = useState([]);
+  const [khushbooFilter, setKhushbooFilter] = useState('all'); // 'all' | 'with_matches' | 'conversational' | 'rate_limited'
+  const [khushbooSearch, setKhushbooSearch] = useState('');
+  const [expandedTurnId, setExpandedTurnId] = useState(null);
 
   // Table 1: Seller Conversions Table Sorting & Filtering
   const [sellerSearch, setSellerSearch] = useState('');
@@ -111,8 +119,12 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
     else setLoading(true);
 
     try {
-      const logs = await fetchAllTelemetryLogs(force);
+      const [logs, chatLogs] = await Promise.all([
+        fetchAllTelemetryLogs(force),
+        fetchKhushbooChatLogs(force)
+      ]);
       setRawLogs(logs);
+      setRawChatLogs(chatLogs);
       setLoading(false);
       setRefreshing(false);
     } catch (err) {
@@ -129,12 +141,39 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
   // Compute analytics dynamically based on selected date range in memory (<3ms)
   const analytics = useMemo(() => {
     if (!rawLogs || rawLogs.length === 0) return null;
-    return computeClickAnalytics(rawLogs, {
+    const clickData = computeClickAnalytics(rawLogs, {
       preset: datePreset,
       customStart: datePreset === 'custom' ? customStart : null,
       customEnd: datePreset === 'custom' ? customEnd : null
     });
-  }, [rawLogs, datePreset, customStart, customEnd]);
+    const khushbooData = computeKhushbooAnalytics(rawChatLogs, {
+      preset: datePreset,
+      customStart: datePreset === 'custom' ? customStart : null,
+      customEnd: datePreset === 'custom' ? customEnd : null
+    });
+    return { ...clickData, khushboo: khushbooData };
+  }, [rawLogs, rawChatLogs, datePreset, customStart, customEnd]);
+
+  // Filtered Ask Khushboo Dialogues
+  const filteredKhushbooTurns = useMemo(() => {
+    const turns = analytics?.khushboo?.dialogTurns || [];
+    return turns.filter(t => {
+      if (khushbooFilter === 'with_matches' && t.matchedCount === 0) return false;
+      if (khushbooFilter === 'rate_limited' && t.status !== 'rate_limited') return false;
+      if (khushbooFilter === 'conversational' && (t.matchedCount > 0 || t.status === 'rate_limited')) return false;
+
+      if (khushbooSearch.trim()) {
+        const q = khushbooSearch.toLowerCase();
+        const inQuery = (t.query || '').toLowerCase().includes(q);
+        const inReply = (t.reply || '').toLowerCase().includes(q);
+        const inSummary = (t.tasteSummary || '').toLowerCase().includes(q);
+        const inMatches = (t.matchedIds || []).some(id => id.toLowerCase().includes(q));
+        if (!inQuery && !inReply && !inSummary && !inMatches) return false;
+      }
+
+      return true;
+    });
+  }, [analytics?.khushboo?.dialogTurns, khushbooFilter, khushbooSearch]);
 
   // Relative time helper
   const getRelativeTime = (timestamp) => {
@@ -466,6 +505,23 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
           </button>
 
           <button
+            onClick={() => setActiveTab('khushboo')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap ${
+              activeTab === 'khushboo'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Sparkles className={`w-4 h-4 ${activeTab === 'khushboo' ? 'text-slate-950 fill-slate-950/20' : 'text-amber-400'}`} />
+            Ask Khushboo Queries
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              activeTab === 'khushboo' ? 'bg-slate-950 text-amber-300' : 'bg-slate-800 text-slate-300'
+            }`}>
+              {analytics?.khushboo?.totalUserQueries || 0} Queries
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('ai_interaction')}
             className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap ${
               activeTab === 'ai_interaction'
@@ -474,7 +530,7 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
             }`}
           >
             <Bot className="w-4 h-4" />
-            AI Interaction & Session Journeys
+            AI Search & Session Journeys
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
               activeTab === 'ai_interaction' ? 'bg-purple-700 text-white' : 'bg-slate-800 text-slate-300'
             }`}>
@@ -723,6 +779,312 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                   </div>
                 </div>
 
+              </div>
+            )}
+
+            {/* ============================================================== */}
+            {/* TAB: ASK KHUSHBOO INTELLIGENCE & CONVERSATIONAL QUERIES       */}
+            {/* ============================================================== */}
+            {activeTab === 'khushboo' && (
+              <div className="space-y-6">
+                
+                {/* 4 Summary KPI Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  
+                  {/* 1. Total User Prompts */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-amber-950/40 to-slate-900 border border-amber-500/20">
+                    <div className="flex items-center justify-between text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">
+                      <span>Total Prompts Asked</span>
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div className="text-3xl font-black text-white">{analytics?.khushboo?.totalUserQueries || 0}</div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Questions asked to Khushboo in {analytics?.timeframe?.label}.
+                    </p>
+                  </div>
+
+                  {/* 2. Avg Recommendations Returned */}
+                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <div className="flex items-center justify-between text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">
+                      <span>Avg Recs Returned</span>
+                      <Package className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div className="text-3xl font-black text-white">{analytics?.khushboo?.avgMatchesPerQuery || 0}</div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Perfumes returned per query ({analytics?.khushboo?.queriesWithMatchesCount || 0} queries gave recs)
+                    </p>
+                  </div>
+
+                  {/* 3. Unique Shopper Sessions */}
+                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2">
+                      <span>Unique Shoppers</span>
+                      <Users className="w-4 h-4 text-indigo-400" />
+                    </div>
+                    <div className="text-3xl font-black text-white">{analytics?.khushboo?.uniqueSessions || 0}</div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Distinct user sessions querying the AI Sommelier
+                    </p>
+                  </div>
+
+                  {/* 4. Success vs Rate Limit */}
+                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <div className="flex items-center justify-between text-xs font-bold text-purple-400 uppercase tracking-wider mb-2">
+                      <span>Success Delivery Rate</span>
+                      <CheckCircle2 className="w-4 h-4 text-purple-400" />
+                    </div>
+                    <div className="text-3xl font-black text-purple-400">{analytics?.khushboo?.successRate || 100}%</div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {analytics?.khushboo?.rateLimitedCount || 0} queries hit Gemini daily quota
+                    </p>
+                  </div>
+
+                </div>
+
+                {/* Top Topics & Fragrance Terms Asked */}
+                {(analytics?.khushboo?.topTopics?.length || 0) > 0 && (
+                  <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-4">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Most Common Fragrance Names, Notes & Vibes Shoppers Ask For:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {analytics.khushboo.topTopics.map((item, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setKhushbooSearch(item.word)}
+                          className={`text-xs font-mono px-2.5 py-1 rounded-lg border transition flex items-center gap-1.5 ${
+                            khushbooSearch.toLowerCase() === item.word.toLowerCase()
+                              ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
+                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
+                          }`}
+                        >
+                          <span className="capitalize">{item.word}</span>
+                          <span className="text-[10px] text-amber-400 font-bold bg-amber-950/80 px-1.5 py-0.2 rounded">
+                            {item.count}
+                          </span>
+                        </button>
+                      ))}
+                      {khushbooSearch && (
+                        <button
+                          onClick={() => setKhushbooSearch('')}
+                          className="text-xs font-mono px-2 py-1 rounded-lg bg-rose-950 text-rose-300 border border-rose-800 hover:bg-rose-900"
+                        >
+                          Clear Filter &times;
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Filter & Search Bar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={khushbooSearch}
+                      onChange={(e) => setKhushbooSearch(e.target.value)}
+                      placeholder="Search prompts (e.g. Hawas, summer, mint, BDC, Ajmal)..."
+                      className="w-full pl-9 pr-8 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                    />
+                    {khushbooSearch && (
+                      <button
+                        onClick={() => setKhushbooSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-mono">
+                    {[
+                      { id: 'all', label: 'All Prompts' },
+                      { id: 'with_matches', label: 'With Recs' },
+                      { id: 'conversational', label: 'Chat Only' },
+                      { id: 'rate_limited', label: 'Quota Limit' }
+                    ].map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => setKhushbooFilter(f.id)}
+                        className={`px-3 py-1.5 rounded-lg border font-semibold transition whitespace-nowrap ${
+                          khushbooFilter === f.id
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dialog Turns List */}
+                <div className="space-y-3">
+                  <div className="text-xs font-mono text-slate-400 flex items-center justify-between px-1">
+                    <span>Showing {filteredKhushbooTurns.length} user queries in {analytics?.timeframe?.label}</span>
+                    <span>Click any query to view full conversation & returned perfumes</span>
+                  </div>
+
+                  {filteredKhushbooTurns.length === 0 ? (
+                    <div className="text-center py-12 bg-slate-900/40 rounded-xl border border-slate-800 p-6 text-slate-400 text-xs font-mono">
+                      No Ask Khushboo queries match your filters for this timeframe.
+                    </div>
+                  ) : (
+                    filteredKhushbooTurns.map((turn) => {
+                      const isExpanded = expandedTurnId === turn.id;
+                      return (
+                        <div
+                          key={turn.id}
+                          className={`rounded-xl border transition-all overflow-hidden ${
+                            isExpanded
+                              ? 'bg-slate-900 border-amber-500/50 shadow-xl'
+                              : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          {/* Row Header */}
+                          <div
+                            onClick={() => setExpandedTurnId(isExpanded ? null : turn.id)}
+                            className="p-4 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-3 select-none"
+                          >
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-indigo-950/80 border border-indigo-500/40 flex items-center justify-center shrink-0 mt-0.5">
+                                <Users className="w-4 h-4 text-indigo-400" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <span className="text-[11px] font-mono text-slate-400">
+                                    {new Date(turn.timestamp).toLocaleString(undefined, {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-slate-500 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                                    {turn.sessionId.slice(0, 16)}...
+                                  </span>
+                                  {turn.status === 'rate_limited' ? (
+                                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800">
+                                      Quota Limit Hit
+                                    </span>
+                                  ) : turn.matchedCount > 0 ? (
+                                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-700">
+                                      {turn.matchedCount} Perfumes Returned
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                                      Conversational
+                                    </span>
+                                  )}
+                                  {turn.intent && turn.intent !== 'chat' && (
+                                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                                      {turn.intent.replace('_', ' ')}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <h4 className="text-sm font-bold text-white leading-snug">
+                                  &ldquo;{turn.query}&rdquo;
+                                </h4>
+
+                                {turn.tasteSummary && (
+                                  <p className="text-xs text-amber-300/80 mt-1 line-clamp-1 font-mono">
+                                    Diagnosis: {turn.tasteSummary}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
+                              <span className="text-xs font-mono font-semibold text-amber-400 hover:underline flex items-center gap-1">
+                                <span>{isExpanded ? 'Hide Details' : 'View Dialogue & Matches'}</span>
+                                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Expanded Details: Reply & Matched Perfumes */}
+                          {isExpanded && (
+                            <div className="p-4 pt-2 border-t border-slate-800/80 space-y-4 bg-slate-950/40">
+                              {/* Assistant Text Response */}
+                              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start gap-3">
+                                <div className="w-7 h-7 rounded-lg bg-amber-950/80 border border-amber-500/40 flex items-center justify-center shrink-0 mt-0.5">
+                                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                </div>
+                                <div className="space-y-1 flex-1">
+                                  <div className="text-xs font-bold text-amber-400">Khushboo's Response:</div>
+                                  <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
+                                    {turn.reply || '(No assistant text reply logged)'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Matched Fragrances Delivered */}
+                              {turn.matchedCards && turn.matchedCards.length > 0 ? (
+                                <div className="space-y-2">
+                                  <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                                    <span>{turn.matchedCards.length} Recommendations Delivered to Shopper:</span>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                                    {turn.matchedCards.map((c, cIdx) => (
+                                      <div
+                                        key={c.id || cIdx}
+                                        className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex flex-col justify-between"
+                                      >
+                                        <div>
+                                          <div className="flex items-center justify-between text-[11px] mb-1">
+                                            <span className="font-bold text-slate-400">{c.brand}</span>
+                                            {c.match_score && (
+                                              <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-950/60 px-1.5 py-0.2 rounded">
+                                                {c.match_score}% Match
+                                              </span>
+                                            )}
+                                          </div>
+                                          <h5 className="font-bold text-xs text-white truncate">{c.name}</h5>
+                                          {c.why && (
+                                            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 italic">
+                                              "{c.why}"
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div className="mt-2 pt-2 border-t border-slate-900 flex items-center justify-between text-xs font-mono">
+                                          <span className="text-emerald-400 font-bold">
+                                            {c.community_price ? `₹${Number(c.community_price).toLocaleString()}` : 'Check Rates'}
+                                          </span>
+                                          <span className="text-[10px] text-slate-500">
+                                            {c.best_seller || 'Verified Sellers'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : turn.matchedIds && turn.matchedIds.length > 0 ? (
+                                <div className="space-y-2">
+                                  <div className="text-xs font-bold text-emerald-400">
+                                    {turn.matchedIds.length} Perfume IDs Returned:
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {turn.matchedIds.map((id, idx) => (
+                                      <span
+                                        key={idx}
+                                        className="text-xs font-mono px-2 py-1 rounded bg-slate-950 border border-slate-800 text-slate-300"
+                                      >
+                                        {id}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             )}
 

@@ -454,3 +454,145 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     liveClickStream: liveClickStream.slice(0, 100)
   };
 }
+
+let cachedChatLogs = null;
+let lastChatLogsFetch = 0;
+
+/**
+ * Fetch raw Ask Khushboo chat messages from Supabase
+ */
+export async function fetchKhushbooChatLogs(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cachedChatLogs && (now - lastChatLogsFetch) < LOGS_CACHE_TTL) {
+    return cachedChatLogs;
+  }
+
+  try {
+    if (!supabase) throw new Error("Supabase client is not configured");
+
+    const { data, error } = await supabase
+      .from('ai_chat_messages')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(2000);
+
+    if (error) {
+      console.error('[FragAdmin] fetchKhushbooChatLogs error:', error);
+      return cachedChatLogs || [];
+    }
+
+    cachedChatLogs = data || [];
+    lastChatLogsFetch = Date.now();
+    return cachedChatLogs;
+  } catch (err) {
+    console.error('[FragAdmin] fetchKhushbooChatLogs exception:', err);
+    return cachedChatLogs || [];
+  }
+}
+
+/**
+ * Computes analytics and dialogue turns for Ask Khushboo within a date range
+ */
+export function computeKhushbooAnalytics(rawChatMessages = [], { preset = '7d', customStart = null, customEnd = null } = {}) {
+  const { start, end, label } = getDateBoundaries(preset, customStart, customEnd);
+
+  // 1. Filter messages by date boundaries
+  const filtered = (rawChatMessages || []).filter(m => {
+    if (!m.created_at) return false;
+    const t = new Date(m.created_at);
+    if (start && t < start) return false;
+    if (end && t > end) return false;
+    return true;
+  });
+
+  // 2. Sort chronologically to pair user questions with assistant responses
+  const sorted = [...filtered].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+  // Group by session
+  const sessionMap = new Map();
+  sorted.forEach(m => {
+    const sId = m.session_id || 'unknown_session';
+    if (!sessionMap.has(sId)) sessionMap.set(sId, []);
+    sessionMap.get(sId).push(m);
+  });
+
+  const dialogTurns = [];
+  let totalMatchesSum = 0;
+  let queriesWithMatchesCount = 0;
+  let rateLimitedCount = 0;
+  const wordFrequency = new Map();
+
+  const stopWords = new Set(["i", "me", "my", "myself", "we", "our", "you", "your", "he", "she", "it", "they", "what", "which", "who", "whom", "this", "that", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now", "like", "love", "want", "need", "give", "looking", "recommend", "perfume", "perfumes", "fragrance", "fragrances"]);
+
+  sessionMap.forEach((msgs, sessionId) => {
+    for (let i = 0; i < msgs.length; i++) {
+      if (msgs[i].role === 'user') {
+        const u = msgs[i];
+        const a = msgs.slice(i + 1).find(m => m.role === 'assistant');
+
+        const matches = a?.matched_ids || [];
+        const matchCount = matches.length;
+        const matchedCards = a?.matched_cards || [];
+        const isRateLimit = a?.intent === 'service_down' || (a?.content && a.content.includes('daily limit'));
+
+        if (isRateLimit) rateLimitedCount++;
+        if (matchCount > 0) {
+          totalMatchesSum += matchCount;
+          queriesWithMatchesCount++;
+        }
+
+        // Extract topic keywords
+        const words = (u.content || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/);
+        words.forEach(w => {
+          if (w.length >= 3 && !stopWords.has(w)) {
+            wordFrequency.set(w, (wordFrequency.get(w) || 0) + 1);
+          }
+        });
+
+        dialogTurns.push({
+          id: u.id,
+          sessionId,
+          timestamp: u.created_at,
+          query: u.content || '',
+          reply: a?.content || '',
+          intent: a?.intent || u.intent || 'chat',
+          tasteSummary: a?.taste_summary || '',
+          matchedIds: matches,
+          matchedCount: matchCount,
+          matchedCards: matchedCards,
+          suggestions: a?.suggestions || [],
+          status: isRateLimit ? 'rate_limited' : (matchCount > 0 ? 'success' : 'conversational')
+        });
+      }
+    }
+  });
+
+  // Sort turns newest first
+  dialogTurns.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  // Top topic keywords
+  const topTopics = Array.from(wordFrequency.entries())
+    .map(([word, count]) => ({ word, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 15);
+
+  const totalUserQueries = dialogTurns.length;
+  const avgMatchesPerQuery = queriesWithMatchesCount > 0
+    ? Number((totalMatchesSum / queriesWithMatchesCount).toFixed(1))
+    : 0;
+  const successRate = totalUserQueries > 0
+    ? Number((((totalUserQueries - rateLimitedCount) / totalUserQueries) * 100).toFixed(1))
+    : 100;
+
+  return {
+    timeframe: { label, start, end },
+    totalUserQueries,
+    uniqueSessions: sessionMap.size,
+    queriesWithMatchesCount,
+    avgMatchesPerQuery,
+    rateLimitedCount,
+    successRate,
+    topTopics,
+    dialogTurns
+  };
+}
