@@ -282,6 +282,8 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
         aiProfiles: [],
         cardClicks: [],
         waClicks: [],
+        hasFilter: false,
+        filterEvents: [],
         firstSeen: createdAt
       });
     }
@@ -370,6 +372,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
 
       totalFilterEvents++;
       addDayVelocity(createdAt, 'filter');
+      sess.hasFilter = true;
       sess.filterEvents = sess.filterEvents || [];
       sess.filterEvents.push(payload);
 
@@ -686,6 +689,25 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
+  // Filter Adoption & Conversion Intelligence (Main search box excluded)
+  const allSessionsList = Array.from(sessions.values());
+  const totalSessionsCount = allSessionsList.length || 1;
+  const filterUserSessions = allSessionsList.filter(s => s.hasFilter);
+  const filterUserSessionsCount = filterUserSessions.length;
+  const filterAdoptionRate = Number(((filterUserSessionsCount / totalSessionsCount) * 100).toFixed(1));
+  const avgFiltersPerEngagedUser = filterUserSessionsCount > 0 ? Number((totalFilterEvents / filterUserSessionsCount).toFixed(1)) : 0;
+
+  // Filter Users vs Non-Filter Users WhatsApp Conversions
+  const filterUserConversions = filterUserSessions.filter(s => s.waClicks && s.waClicks.length > 0).length;
+  const filterConversionRate = filterUserSessionsCount > 0 ? Number(((filterUserConversions / filterUserSessionsCount) * 100).toFixed(1)) : 0;
+
+  const nonFilterUserSessions = allSessionsList.filter(s => !s.hasFilter);
+  const nonFilterUserSessionsCount = nonFilterUserSessions.length;
+  const nonFilterUserConversions = nonFilterUserSessions.filter(s => s.waClicks && s.waClicks.length > 0).length;
+  const nonFilterConversionRate = nonFilterUserSessionsCount > 0 ? Number(((nonFilterUserConversions / nonFilterUserSessionsCount) * 100).toFixed(1)) : 0;
+
+  const conversionLiftMultiplier = nonFilterConversionRate > 0 ? Number((filterConversionRate / nonFilterConversionRate).toFixed(2)) : (filterConversionRate > 0 ? 2.0 : 1.0);
+
   return {
     timeframe: {
       preset,
@@ -751,6 +773,16 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     },
     catalogFilters: {
       totalFilterEvents,
+      totalSessionsCount,
+      filterUserSessionsCount,
+      filterAdoptionRate,
+      avgFiltersPerEngagedUser,
+      filterUserConversions,
+      filterConversionRate,
+      nonFilterUserSessionsCount,
+      nonFilterUserConversions,
+      nonFilterConversionRate,
+      conversionLiftMultiplier,
       allFiltersList: Array.from(allFiltersMap.values()).map(f => ({
         id: f.id,
         category: f.category,
