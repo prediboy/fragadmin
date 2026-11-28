@@ -238,7 +238,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
   };
 
   // Day bucket helper
-  const addDayVelocity = (dateStr, type) => {
+  const addDayVelocity = (dateStr, type, extra = {}) => {
     if (!dateStr) return;
     const d = new Date(dateStr);
     const dayKey = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -246,25 +246,41 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
       dayVelocityMap[dayKey] = {
         date: dayKey,
         rawDate: d,
+        isoDate: d.toISOString().split('T')[0],
         visits: 0,
+        uniqueSessions: new Set(),
         searches: 0,
         cardOpens: 0,
         converts: 0,
         bottles: 0,
-        decants: 0
+        decants: 0,
+        gmv: 0,
+        redditVisits: 0,
+        directVisits: 0,
+        googleVisits: 0,
+        filters: 0
       };
     }
-    if (type === 'visit') dayVelocityMap[dayKey].visits = (dayVelocityMap[dayKey].visits || 0) + 1;
-    if (type === 'search') dayVelocityMap[dayKey].searches++;
-    if (type === 'card') dayVelocityMap[dayKey].cardOpens++;
-    if (type === 'filter') dayVelocityMap[dayKey].filters = (dayVelocityMap[dayKey].filters || 0) + 1;
+    const day = dayVelocityMap[dayKey];
+    if (extra.sId) day.uniqueSessions.add(extra.sId);
+    if (type === 'visit') {
+      day.visits++;
+      if (extra.channel === 'reddit') day.redditVisits++;
+      else if (extra.channel === 'google') day.googleVisits++;
+      else day.directVisits++;
+    }
+    if (type === 'search') day.searches++;
+    if (type === 'card') day.cardOpens++;
+    if (type === 'filter') day.filters = (day.filters || 0) + 1;
     if (type === 'convert_bottle') {
-      dayVelocityMap[dayKey].converts++;
-      dayVelocityMap[dayKey].bottles++;
+      day.converts++;
+      day.bottles++;
+      if (extra.price) day.gmv += Number(extra.price);
     }
     if (type === 'convert_decant') {
-      dayVelocityMap[dayKey].converts++;
-      dayVelocityMap[dayKey].decants++;
+      day.converts++;
+      day.decants++;
+      if (extra.price) day.gmv += Number(extra.price);
     }
   };
 
@@ -292,7 +308,6 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     // EVENT: Session Visit & Traffic Acquisition
     if (title === 'EVENT:session_visit') {
       totalSessionVisits++;
-      addDayVelocity(createdAt, 'visit');
 
       const src = (payload.source || r.umbrella_season?.replace('source:', '') || 'direct').toLowerCase();
       const ref = (payload.referrer || 'direct').toLowerCase();
@@ -328,6 +343,8 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
         channelMap.direct.webVisits++;
       }
 
+      addDayVelocity(createdAt, 'visit', { sId, channel: chKey });
+
       channelMap[chKey].visits++;
       channelMap[chKey].sessions.add(sId);
 
@@ -347,7 +364,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     // EVENT: AI Search Query
     else if (title === 'EVENT:search_query') {
       totalSearches++;
-      addDayVelocity(createdAt, 'search');
+      addDayVelocity(createdAt, 'search', { sId });
       const q = (payload.query || r.umbrella_season || '').trim().toLowerCase();
       if (q && q.length >= 2 && !q.startsWith('anchor:')) {
         sess.searches.push(q);
@@ -371,7 +388,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
       }
 
       totalFilterEvents++;
-      addDayVelocity(createdAt, 'filter');
+      addDayVelocity(createdAt, 'filter', { sId });
       sess.hasFilter = true;
       sess.filterEvents = sess.filterEvents || [];
       sess.filterEvents.push(payload);
@@ -440,7 +457,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     // EVENT: Card Detail Click / Open
     else if (title === 'EVENT:card_click') {
       totalCardClicks++;
-      addDayVelocity(createdAt, 'card');
+      addDayVelocity(createdAt, 'card', { sId });
       sess.cardClicks.push(payload);
 
       liveClickStream.push({
@@ -475,7 +492,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
 
       if (fmt === 'decant') {
         totalDecantConverts++;
-        addDayVelocity(createdAt, 'convert_decant');
+        addDayVelocity(createdAt, 'convert_decant', { sId, price });
         if (price > 0) totalDecantGmv += price;
         if (payload.name) {
           const k = payload.brand ? `${payload.brand} - ${payload.name}` : payload.name;
@@ -486,7 +503,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
         }
       } else {
         totalBottleConverts++;
-        addDayVelocity(createdAt, 'convert_bottle');
+        addDayVelocity(createdAt, 'convert_bottle', { sId, price });
         if (price > 0) totalBottleGmv += price;
         if (payload.name) {
           const k = payload.brand ? `${payload.brand} - ${payload.name}` : payload.name;
@@ -623,7 +640,28 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     .slice(0, 15);
 
   const dailyVelocity = Object.values(dayVelocityMap)
-    .sort((a, b) => a.rawDate - b.rawDate);
+    .sort((a, b) => a.rawDate - b.rawDate)
+    .map(d => {
+      const uCount = d.uniqueSessions.size || (d.visits > 0 ? Math.round(d.visits * 0.55) : (d.converts > 0 ? 1 : 0));
+      const convRate = uCount > 0 ? Number(((d.converts / uCount) * 100).toFixed(1)) : 0;
+      return {
+        date: d.date,
+        rawDate: d.rawDate,
+        isoDate: d.isoDate,
+        visits: d.visits,
+        uniqueVisitors: uCount,
+        converts: d.converts,
+        bottles: d.bottles,
+        decants: d.decants,
+        gmv: d.gmv,
+        conversionRate: convRate,
+        redditVisits: d.redditVisits,
+        directVisits: d.directVisits,
+        googleVisits: d.googleVisits,
+        searches: d.searches,
+        cardOpens: d.cardOpens
+      };
+    });
 
   const sessionConversionRate = validSessions.length > 0
     ? Number(((convertingSessions.length / validSessions.length) * 100).toFixed(1))

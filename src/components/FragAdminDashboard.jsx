@@ -15,6 +15,7 @@ import {
   computeKhushbooAnalytics,
   getDateBoundaries
 } from '../services/adminService.js';
+import DailyTrendChart from './DailyTrendChart.jsx';
 
 // Helper for filter category styling and icons
 function getFilterCategoryBadge(cat) {
@@ -886,6 +887,9 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                   </div>
                 </div>
 
+                {/* Daily WhatsApp Conversions & Pipeline Velocity Trend Chart */}
+                <DailyTrendChart dailyVelocity={analytics?.dailyVelocity} timeframeLabel={analytics?.timeframe?.label} />
+
                 {/* Seller Conversion Table (100% Sortable on Every Column) */}
                 <div className="bg-slate-900/80 rounded-xl border border-slate-800 overflow-hidden shadow-lg">
                   <div className="overflow-x-auto">
@@ -1152,6 +1156,9 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                   </div>
 
                 </div>
+
+                {/* Daily Traffic & WhatsApp Leads Velocity Trend Chart */}
+                <DailyTrendChart dailyVelocity={analytics?.dailyVelocity} timeframeLabel={analytics?.timeframe?.label} />
 
                 {/* 2. Visual Platform & Device Distribution Card */}
                 <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 shadow-lg">
