@@ -175,6 +175,68 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
   let totalBottleConverts = 0;
   let totalDecantConverts = 0;
 
+  // Traffic Acquisition & Device Intelligence
+  let totalSessionVisits = 0;
+  const sessionSourceMap = new Map();
+  const sessionDeviceMap = new Map();
+  const rawReferrersMap = new Map();
+
+  const channelMap = {
+    reddit: {
+      id: 'reddit',
+      name: 'Reddit Community',
+      subtitle: 'r/DesiFragranceAddicts & Reddit App',
+      visits: 0,
+      sessions: new Set(),
+      conversions: 0,
+      androidAppVisits: 0,
+      webVisits: 0,
+      color: '#FF4500',
+      badgeBg: 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+    },
+    direct: {
+      id: 'direct',
+      name: 'Direct & Bookmarks',
+      subtitle: 'Direct URLs, WhatsApp & Telegram shares',
+      visits: 0,
+      sessions: new Set(),
+      conversions: 0,
+      androidAppVisits: 0,
+      webVisits: 0,
+      color: '#3B82F6',
+      badgeBg: 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+    },
+    google: {
+      id: 'google',
+      name: 'Google Search',
+      subtitle: 'Organic Web & Google App Search',
+      visits: 0,
+      sessions: new Set(),
+      conversions: 0,
+      androidAppVisits: 0,
+      webVisits: 0,
+      color: '#10B981',
+      badgeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+    },
+    other: {
+      id: 'other',
+      name: 'Other Referrals',
+      subtitle: 'Bing, Twitter/X, Instagram, etc.',
+      visits: 0,
+      sessions: new Set(),
+      conversions: 0,
+      androidAppVisits: 0,
+      webVisits: 0,
+      color: '#A855F7',
+      badgeBg: 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+    }
+  };
+
+  const deviceMap = {
+    androidApp: 0,
+    mobileOrDesktopWeb: 0
+  };
+
   // Day bucket helper
   const addDayVelocity = (dateStr, type) => {
     if (!dateStr) return;
@@ -184,6 +246,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
       dayVelocityMap[dayKey] = {
         date: dayKey,
         rawDate: d,
+        visits: 0,
         searches: 0,
         cardOpens: 0,
         converts: 0,
@@ -191,6 +254,7 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
         decants: 0
       };
     }
+    if (type === 'visit') dayVelocityMap[dayKey].visits = (dayVelocityMap[dayKey].visits || 0) + 1;
     if (type === 'search') dayVelocityMap[dayKey].searches++;
     if (type === 'card') dayVelocityMap[dayKey].cardOpens++;
     if (type === 'filter') dayVelocityMap[dayKey].filters = (dayVelocityMap[dayKey].filters || 0) + 1;
@@ -223,8 +287,63 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     }
     const sess = sessions.get(sId);
 
+    // EVENT: Session Visit & Traffic Acquisition
+    if (title === 'EVENT:session_visit') {
+      totalSessionVisits++;
+      addDayVelocity(createdAt, 'visit');
+
+      const src = (payload.source || r.umbrella_season?.replace('source:', '') || 'direct').toLowerCase();
+      const ref = (payload.referrer || 'direct').toLowerCase();
+      const host = (payload.hostname || 'direct').toLowerCase();
+
+      let chKey = 'direct';
+      let isAndroidApp = false;
+
+      if (src.includes('reddit') || ref.includes('reddit') || host.includes('reddit')) {
+        chKey = 'reddit';
+        if (ref.includes('com.reddit.frontpage') || src.includes('com.reddit.frontpage') || host.includes('com.reddit.frontpage')) {
+          isAndroidApp = true;
+          channelMap.reddit.androidAppVisits++;
+        } else {
+          channelMap.reddit.webVisits++;
+        }
+      } else if (src.includes('google') || ref.includes('google') || host.includes('google')) {
+        chKey = 'google';
+        if (ref.includes('googlequicksearchbox') || host.includes('googlequicksearchbox')) {
+          isAndroidApp = true;
+          channelMap.google.androidAppVisits++;
+        } else {
+          channelMap.google.webVisits++;
+        }
+      } else if (src === 'localhost' || ref.includes('localhost')) {
+        chKey = 'other';
+        channelMap.other.webVisits++;
+      } else if (src !== 'direct' && ref !== 'direct') {
+        chKey = 'other';
+        channelMap.other.webVisits++;
+      } else {
+        chKey = 'direct';
+        channelMap.direct.webVisits++;
+      }
+
+      channelMap[chKey].visits++;
+      channelMap[chKey].sessions.add(sId);
+
+      if (isAndroidApp) deviceMap.androidApp++;
+      else deviceMap.mobileOrDesktopWeb++;
+
+      if (!sessionSourceMap.has(sId)) {
+        sessionSourceMap.set(sId, chKey);
+      }
+      if (!sessionDeviceMap.has(sId)) {
+        sessionDeviceMap.set(sId, isAndroidApp ? 'Android App' : 'Web Browser');
+      }
+
+      const displayRef = payload.referrer || 'direct';
+      rawReferrersMap.set(displayRef, (rawReferrersMap.get(displayRef) || 0) + 1);
+    }
     // EVENT: AI Search Query
-    if (title === 'EVENT:search_query') {
+    else if (title === 'EVENT:search_query') {
       totalSearches++;
       addDayVelocity(createdAt, 'search');
       const q = (payload.query || r.umbrella_season || '').trim().toLowerCase();
@@ -338,6 +457,14 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     else if (title === 'EVENT:whatsapp_click') {
       totalWhatsAppClicks++;
       sess.waClicks.push(payload);
+
+      // Attribution to acquisition channel
+      const userCh = sessionSourceMap.get(sId) ||
+        ((payload.source?.includes('reddit') || r.umbrella_season?.includes('reddit')) ? 'reddit' :
+         (payload.source?.includes('google') || r.umbrella_season?.includes('google')) ? 'google' : 'direct');
+      if (channelMap[userCh]) {
+        channelMap[userCh].conversions++;
+      }
 
       const sellerName = payload.seller_name || 'Unattributed Seller';
       const fmt = payload.format || (r.umbrella_season?.includes('decant') ? 'decant' : 'bottle');
@@ -499,6 +626,66 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
     ? Number(((convertingSessions.length / validSessions.length) * 100).toFixed(1))
     : 0;
 
+  // Traffic Acquisition Analytics Calculation
+  const uniqueVisitorSessions = new Set();
+  Object.values(channelMap).forEach(c => c.sessions.forEach(s => uniqueVisitorSessions.add(s)));
+  const totalUniqueVisitors = uniqueVisitorSessions.size || 1;
+
+  const channelsList = Object.values(channelMap).map(c => {
+    const vShare = totalSessionVisits > 0 ? Number(((c.visits / totalSessionVisits) * 100).toFixed(1)) : 0;
+    const uCount = c.sessions.size;
+    const uShare = Number(((uCount / totalUniqueVisitors) * 100).toFixed(1));
+    const convRate = uCount > 0 ? Number(((c.conversions / uCount) * 100).toFixed(1)) : 0;
+    const androidShare = c.visits > 0 ? Number(((c.androidAppVisits / c.visits) * 100).toFixed(1)) : 0;
+    const webShare = c.visits > 0 ? Number(((c.webVisits / c.visits) * 100).toFixed(1)) : 0;
+
+    return {
+      id: c.id,
+      name: c.name,
+      subtitle: c.subtitle,
+      visits: c.visits,
+      visitShare: vShare,
+      uniqueVisitors: uCount,
+      uniqueShare: uShare,
+      conversions: c.conversions,
+      conversionRate: convRate,
+      androidAppVisits: c.androidAppVisits,
+      androidAppShare: androidShare,
+      webVisits: c.webVisits,
+      webShare: webShare,
+      color: c.color,
+      badgeBg: c.badgeBg
+    };
+  }).sort((a, b) => b.visits - a.visits);
+
+  const totalDeviceVisits = (deviceMap.androidApp + deviceMap.mobileOrDesktopWeb) || 1;
+  const deviceMix = {
+    androidApp: {
+      count: deviceMap.androidApp,
+      share: Number(((deviceMap.androidApp / totalDeviceVisits) * 100).toFixed(1)),
+      label: 'Android Native Apps (Reddit App, Google App)'
+    },
+    web: {
+      count: deviceMap.mobileOrDesktopWeb,
+      share: Number(((deviceMap.mobileOrDesktopWeb / totalDeviceVisits) * 100).toFixed(1)),
+      label: 'Web Browsers (Desktop & Mobile Web)'
+    }
+  };
+
+  const topReferrers = Array.from(rawReferrersMap.entries())
+    .map(([ref, count]) => ({
+      referrer: ref,
+      cleanName: ref === 'direct' ? 'Direct / Bookmark / WhatsApp Chat' :
+                 ref.includes('com.reddit.frontpage') ? 'Reddit Android App' :
+                 ref.includes('reddit.com') ? 'Reddit Web (r/DesiFragranceAddicts)' :
+                 ref.includes('googlequicksearchbox') ? 'Google Android Search' :
+                 ref.includes('google.') ? 'Google Search' : ref,
+      count,
+      share: totalSessionVisits > 0 ? Number(((count / totalSessionVisits) * 100).toFixed(1)) : 0
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+
   return {
     timeframe: {
       preset,
@@ -523,7 +710,13 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
       avgAov: totalWhatsAppClicks > 0 ? Math.round(totalGrossPipeline / totalWhatsAppClicks) : 0,
       totalCardClicks,
       totalSearches,
-      totalFilterEvents
+      totalFilterEvents,
+      totalSessionVisits,
+      totalUniqueVisitors,
+      redditShare: channelsList.find(c => c.id === 'reddit')?.visitShare || 0,
+      directShare: channelsList.find(c => c.id === 'direct')?.visitShare || 0,
+      googleShare: channelsList.find(c => c.id === 'google')?.visitShare || 0,
+      androidAppShare: deviceMix.androidApp.share
     },
     aiInteraction: {
       totalQueries: totalSearches,
@@ -576,6 +769,15 @@ export function computeClickAnalytics(rawRows, { preset = '7d', customStart = nu
       topDnas: Array.from(filterDnasMap.entries()).map(([dna, count]) => ({ dna, count })).sort((a, b) => b.count - a.count).slice(0, 10),
       topVibes: Array.from(filterVibesMap.entries()).map(([vibe, count]) => ({ vibe, count })).sort((a, b) => b.count - a.count).slice(0, 10),
       avgBudget: filterBudgets.length > 0 ? Math.round(filterBudgets.reduce((a, b) => a + b, 0) / filterBudgets.length) : null
+    },
+    trafficAcquisition: {
+      totalVisits: totalSessionVisits,
+      totalUniqueVisitors,
+      channels: channelsList,
+      deviceMix,
+      topReferrers,
+      topChannel: channelsList[0] || null,
+      highestConvertingChannel: [...channelsList].sort((a, b) => b.conversionRate - a.conversionRate)[0] || null
     },
     dailyVelocity,
     liveClickStream: liveClickStream.slice(0, 100)

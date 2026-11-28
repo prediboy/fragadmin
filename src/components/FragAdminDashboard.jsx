@@ -5,7 +5,8 @@ import {
   Tag, MessageCircle, BarChart2, Layers, DollarSign, Package,
   Search, ExternalLink, RefreshCw, Sparkles, ChevronRight, Check, X,
   TrendingUp, MousePointer, HelpCircle, Bot, Compass, Send, Phone,
-  Droplets, Sun, Flame, Briefcase, GitBranch, CornerDownRight, MessageSquare, ArrowRight
+  Droplets, Sun, Flame, Briefcase, GitBranch, CornerDownRight, MessageSquare, ArrowRight,
+  Globe, Smartphone, Laptop, Share2
 } from 'lucide-react';
 import {
   fetchAllTelemetryLogs,
@@ -147,6 +148,11 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
   const [filterSortOrder, setFilterSortOrder] = useState('desc');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterSearch, setFilterSearch] = useState('');
+
+  // Table 6: Traffic Referrers Sorting & Channel Filtering
+  const [referrerSortKey, setReferrerSortKey] = useState('count');
+  const [referrerSortOrder, setReferrerSortOrder] = useState('desc');
+  const [trafficFilterChannel, setTrafficFilterChannel] = useState('all');
 
   // Initial Load
   const loadLogs = async (force = false) => {
@@ -398,10 +404,25 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
     return genericSort(result, filterSortKey, filterSortOrder);
   }, [analytics?.catalogFilters?.allFiltersList, filterCategory, filterSearch, filterSortKey, filterSortOrder]);
 
+  // Filtered and Sorted Traffic Acquisition Referrers
+  const filteredAndSortedReferrers = useMemo(() => {
+    let list = [...(analytics?.trafficAcquisition?.topReferrers || [])];
+    if (trafficFilterChannel !== 'all') {
+      list = list.filter(r => {
+        if (trafficFilterChannel === 'reddit') return r.referrer.includes('reddit') || r.cleanName.includes('Reddit');
+        if (trafficFilterChannel === 'google') return r.referrer.includes('google') || r.cleanName.includes('Google');
+        if (trafficFilterChannel === 'direct') return r.referrer === 'direct';
+        return true;
+      });
+    }
+    return genericSort(list, referrerSortKey, referrerSortOrder);
+  }, [analytics?.trafficAcquisition?.topReferrers, trafficFilterChannel, referrerSortKey, referrerSortOrder]);
+
   const kpis = analytics?.kpis;
   const ai = analytics?.aiInteraction;
   const funnel = analytics?.userFunnel;
   const dvr = analytics?.decantVsRetail;
+  const traffic = analytics?.trafficAcquisition;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-indigo-300">
@@ -607,6 +628,91 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
         </div>
       </section>
 
+      {/* 3B. Visual Acquisition & Platform Mix Summary Bar */}
+      <section className="bg-slate-900/60 border-b border-slate-800 px-4 lg:px-8 py-3">
+        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+          
+          {/* Channel Multi-Color Distribution Bar */}
+          <div className="flex-1 w-full max-w-2xl">
+            <div className="flex items-center justify-between text-xs mb-1.5 font-semibold text-slate-300">
+              <span className="flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-blue-400" />
+                <span>Traffic Acquisition Distribution:</span>
+                <span className="text-slate-400 font-normal">
+                  ({analytics?.trafficAcquisition?.totalVisits?.toLocaleString() || 0} visits &bull; {analytics?.trafficAcquisition?.totalUniqueVisitors?.toLocaleString() || 0} unique)
+                </span>
+              </span>
+              <button
+                onClick={() => setActiveTab('traffic')}
+                className="text-[11px] text-blue-400 hover:text-blue-300 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Full Breakdown</span>
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+
+            {/* Segmented Progress Bar */}
+            <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden flex shadow-inner">
+              <div 
+                style={{ width: `${analytics?.trafficAcquisition?.channels?.find(c => c.id === 'direct')?.visitShare || 67.5}%` }}
+                className="bg-blue-500 h-full transition-all duration-500"
+                title={`Direct: ${analytics?.trafficAcquisition?.channels?.find(c => c.id === 'direct')?.visitShare || 0}%`}
+              />
+              <div 
+                style={{ width: `${analytics?.trafficAcquisition?.channels?.find(c => c.id === 'reddit')?.visitShare || 31.3}%` }}
+                className="bg-orange-500 h-full transition-all duration-500"
+                title={`Reddit: ${analytics?.trafficAcquisition?.channels?.find(c => c.id === 'reddit')?.visitShare || 0}%`}
+              />
+              <div 
+                style={{ width: `${analytics?.trafficAcquisition?.channels?.find(c => c.id === 'google')?.visitShare || 0.8}%` }}
+                className="bg-emerald-500 h-full transition-all duration-500"
+                title={`Google: ${analytics?.trafficAcquisition?.channels?.find(c => c.id === 'google')?.visitShare || 0}%`}
+              />
+              <div 
+                style={{ width: `${analytics?.trafficAcquisition?.channels?.find(c => c.id === 'other')?.visitShare || 0.4}%` }}
+                className="bg-purple-500 h-full transition-all duration-500"
+                title={`Other: ${analytics?.trafficAcquisition?.channels?.find(c => c.id === 'other')?.visitShare || 0}%`}
+              />
+            </div>
+
+            {/* Micro Legend */}
+            <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400 flex-wrap">
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+                <span>Direct ({analytics?.trafficAcquisition?.channels?.find(c => c.id === 'direct')?.visitShare || 0}%)</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-orange-500 inline-block" />
+                <span className="text-orange-300 font-semibold">Reddit ({analytics?.trafficAcquisition?.channels?.find(c => c.id === 'reddit')?.visitShare || 0}%)</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                <span>Google ({analytics?.trafficAcquisition?.channels?.find(c => c.id === 'google')?.visitShare || 0}%)</span>
+              </div>
+              {Number(analytics?.trafficAcquisition?.channels?.find(c => c.id === 'other')?.visitShare || 0) > 0 && (
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 inline-block" />
+                  <span>Other ({analytics?.trafficAcquisition?.channels?.find(c => c.id === 'other')?.visitShare || 0}%)</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Insights Pills */}
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 font-medium">
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>Reddit Android App: <strong>{analytics?.trafficAcquisition?.deviceMix?.androidApp?.share || 0}%</strong> of total traffic</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium">
+              <Zap className="w-3.5 h-3.5" />
+              <span>Reddit Conv. Rate: <strong>{analytics?.trafficAcquisition?.channels?.find(c => c.id === 'reddit')?.conversionRate || 0}%</strong> 🔥</span>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
       {/* 4. Tab Navigation Bar */}
       <nav className="border-b border-slate-800 bg-slate-950 sticky top-[61px] z-30 px-4 lg:px-8">
         <div className="max-w-7xl mx-auto flex items-center gap-1 overflow-x-auto no-scrollbar py-2">
@@ -625,6 +731,23 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
               activeTab === 'sellers' ? 'bg-indigo-700 text-white' : 'bg-slate-800 text-slate-300'
             }`}>
               {analytics?.sellerConversions?.length || 0} Active
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('traffic')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap ${
+              activeTab === 'traffic'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Globe className="w-4 h-4" />
+            Traffic & Device Mix
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              activeTab === 'traffic' ? 'bg-blue-700 text-white' : 'bg-slate-800 text-slate-300'
+            }`}>
+              {traffic?.totalVisits?.toLocaleString() || 0} Visits
             </span>
           </button>
 
@@ -915,6 +1038,418 @@ export default function FragAdminDashboard({ isDark, onToggleTheme, onOpenSeller
                             </td>
                           </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* ============================================================== */}
+            {/* TAB: TRAFFIC ACQUISITION & DEVICE MIX                         */}
+            {/* ============================================================== */}
+            {activeTab === 'traffic' && (
+              <div className="space-y-6">
+
+                {/* 1. Traffic Acquisition KPI Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  
+                  {/* Total Visits & Reach */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-blue-950/40 to-slate-900 border border-blue-500/20 shadow-lg">
+                    <div className="flex items-center justify-between text-xs font-bold text-blue-400 uppercase tracking-wider mb-2">
+                      <span>Total Sessions</span>
+                      <Globe className="w-4 h-4 text-blue-400" />
+                    </div>
+                    <div className="text-3xl font-black text-white">
+                      {traffic?.totalVisits?.toLocaleString() || 0}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-400 mt-2">
+                      <span>Unique Visitors:</span>
+                      <span className="font-bold text-white">{traffic?.totalUniqueVisitors?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                      <div
+                        style={{ width: `${Math.min(100, ((traffic?.totalUniqueVisitors || 0) / (traffic?.totalVisits || 1)) * 100)}%` }}
+                        className="bg-blue-400 h-full rounded-full"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Reddit Community Acquisition */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-orange-950/40 to-slate-900 border border-orange-500/20 shadow-lg">
+                    <div className="flex items-center justify-between text-xs font-bold text-orange-400 uppercase tracking-wider mb-2">
+                      <span>Reddit Community</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 font-bold border border-orange-500/30">
+                        {traffic?.channels?.find(c => c.id === 'reddit')?.visitShare || 0}% Traffic
+                      </span>
+                    </div>
+                    <div className="text-3xl font-black text-white">
+                      {traffic?.channels?.find(c => c.id === 'reddit')?.visits?.toLocaleString() || 0}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-400 mt-2">
+                      <span>WhatsApp Leads:</span>
+                      <span className="font-bold text-orange-300">
+                        {traffic?.channels?.find(c => c.id === 'reddit')?.conversions || 0} ({traffic?.channels?.find(c => c.id === 'reddit')?.conversionRate || 0}% conv)
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                      <span>Android App Share:</span>
+                      <span className="font-semibold text-slate-300">
+                        {traffic?.channels?.find(c => c.id === 'reddit')?.androidAppShare || 0}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Direct & Bookmarks */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-slate-900 to-slate-900 border border-slate-800 shadow-lg">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                      <span>Direct & Bookmarks</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-bold border border-slate-700">
+                        {traffic?.channels?.find(c => c.id === 'direct')?.visitShare || 0}% Traffic
+                      </span>
+                    </div>
+                    <div className="text-3xl font-black text-white">
+                      {traffic?.channels?.find(c => c.id === 'direct')?.visits?.toLocaleString() || 0}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-400 mt-2">
+                      <span>WhatsApp Leads:</span>
+                      <span className="font-bold text-blue-300">
+                        {traffic?.channels?.find(c => c.id === 'direct')?.conversions || 0} ({traffic?.channels?.find(c => c.id === 'direct')?.conversionRate || 0}% conv)
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                      <span>Unique Visitors:</span>
+                      <span className="font-semibold text-slate-300">
+                        {traffic?.channels?.find(c => c.id === 'direct')?.uniqueVisitors?.toLocaleString() || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Google Search & Other */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-950/40 to-slate-900 border border-emerald-500/20 shadow-lg">
+                    <div className="flex items-center justify-between text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">
+                      <span>Google & Organic</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                        {traffic?.channels?.find(c => c.id === 'google')?.visitShare || 0}% Traffic
+                      </span>
+                    </div>
+                    <div className="text-3xl font-black text-white">
+                      {traffic?.channels?.find(c => c.id === 'google')?.visits?.toLocaleString() || 0}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-400 mt-2">
+                      <span>WhatsApp Leads:</span>
+                      <span className="font-bold text-emerald-300">
+                        {traffic?.channels?.find(c => c.id === 'google')?.conversions || 0} ({traffic?.channels?.find(c => c.id === 'google')?.conversionRate || 0}% conv)
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+                      <span>Search Reach:</span>
+                      <span className="font-semibold text-slate-300">
+                        {traffic?.channels?.find(c => c.id === 'google')?.uniqueVisitors?.toLocaleString() || 0} unique
+                      </span>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* 2. Visual Platform & Device Distribution Card */}
+                <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 shadow-lg">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Smartphone className="w-4 h-4 text-indigo-400" />
+                        Device & App Environment Mix (Native App vs Web)
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Breakdown between native Android App in-app browser sessions (Reddit & Google Search) vs standard web browsers
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                        <Smartphone className="w-3.5 h-3.5 text-orange-400" />
+                        Android Apps: <strong>{traffic?.deviceMix?.androidApp?.count?.toLocaleString() || 0} ({traffic?.deviceMix?.androidApp?.share || 0}%)</strong>
+                      </span>
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                        <Laptop className="w-3.5 h-3.5 text-blue-400" />
+                        Web Browsers: <strong>{traffic?.deviceMix?.web?.count?.toLocaleString() || 0} ({traffic?.deviceMix?.web?.share || 0}%)</strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Visual Segmented Device Bar */}
+                  <div className="w-full h-4 bg-slate-950 rounded-lg p-0.5 border border-slate-800 flex overflow-hidden shadow-inner">
+                    <div
+                      style={{ width: `${traffic?.deviceMix?.androidApp?.share || 23.6}%` }}
+                      className="bg-gradient-to-r from-orange-500 to-amber-500 h-full rounded-l-md transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-slate-950"
+                      title={`Android Apps: ${traffic?.deviceMix?.androidApp?.share}%`}
+                    >
+                      {Number(traffic?.deviceMix?.androidApp?.share || 0) > 10 ? `${traffic?.deviceMix?.androidApp?.share}% App` : ''}
+                    </div>
+                    <div
+                      style={{ width: `${traffic?.deviceMix?.web?.share || 76.4}%` }}
+                      className="bg-gradient-to-r from-blue-600 to-indigo-500 h-full rounded-r-md transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-white"
+                      title={`Web Browsers: ${traffic?.deviceMix?.web?.share}%`}
+                    >
+                      {Number(traffic?.deviceMix?.web?.share || 0) > 10 ? `${traffic?.deviceMix?.web?.share}% Web Browser` : ''}
+                    </div>
+                  </div>
+
+                  {/* 2 Column Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    
+                    {/* Android Apps Card */}
+                    <div className="p-3.5 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                      <div className="flex items-center justify-between text-xs font-semibold text-orange-400 mb-2">
+                        <span className="flex items-center gap-1.5">
+                          <Smartphone className="w-4 h-4" />
+                          Android Native In-App WebViews
+                        </span>
+                        <span className="font-mono font-bold text-white">{traffic?.deviceMix?.androidApp?.count?.toLocaleString()} visits</span>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        75.1% of all Reddit traffic opens FragSeeker directly inside the Android Reddit App (<code className="text-orange-300 bg-orange-950/40 px-1 py-0.5 rounded text-[10px]">com.reddit.frontpage</code>). These users have high buyer intent and convert to WhatsApp at over 53%.
+                      </p>
+                    </div>
+
+                    {/* Web Browsers Card */}
+                    <div className="p-3.5 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                      <div className="flex items-center justify-between text-xs font-semibold text-blue-400 mb-2">
+                        <span className="flex items-center gap-1.5">
+                          <Laptop className="w-4 h-4" />
+                          Mobile & Desktop Web Browsers
+                        </span>
+                        <span className="font-mono font-bold text-white">{traffic?.deviceMix?.web?.count?.toLocaleString()} visits</span>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        Chrome, Safari, Firefox, and desktop web visitors. Covers direct bookmarks, WhatsApp shared links, desktop Reddit users, and Google Search results.
+                      </p>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* 3. Acquisition Channels Table */}
+                <div className="bg-slate-900/80 rounded-xl border border-slate-800 overflow-hidden shadow-lg">
+                  <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Share2 className="w-4 h-4 text-indigo-400" />
+                        Acquisition Channels Performance & Lead Conversion
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Channel volume, unique visitor reach, and downstream WhatsApp seller lead conversion rate
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800 bg-slate-950/50 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                          <th className="py-3 px-4">Channel</th>
+                          <th className="py-3 px-4 text-right">Page Visits</th>
+                          <th className="py-3 px-4 text-right">Traffic Share</th>
+                          <th className="py-3 px-4 text-right">Unique Visitors</th>
+                          <th className="py-3 px-4 text-right">Unique Reach %</th>
+                          <th className="py-3 px-4 text-center">Android App vs Web</th>
+                          <th className="py-3 px-4 text-right">WhatsApp Leads</th>
+                          <th className="py-3 px-4 text-right">Conversion Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-mono">
+                        {(traffic?.channels || []).map((ch) => (
+                          <tr key={ch.id} className="hover:bg-slate-800/40 transition">
+                            <td className="py-3 px-4 text-white font-sans font-bold flex items-center gap-2.5">
+                              <span
+                                style={{ backgroundColor: ch.color }}
+                                className="w-2.5 h-2.5 rounded-full inline-block flex-shrink-0"
+                              />
+                              <div>
+                                <div className="text-white font-bold">{ch.name}</div>
+                                <div className="text-[10px] text-slate-400 font-normal">{ch.subtitle}</div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-white">
+                              {ch.visits.toLocaleString()}
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-slate-300">
+                              {ch.visitShare}%
+                            </td>
+                            <td className="py-3 px-4 text-right text-slate-200">
+                              {ch.uniqueVisitors.toLocaleString()}
+                            </td>
+                            <td className="py-3 px-4 text-right text-slate-400">
+                              {ch.uniqueShare}%
+                            </td>
+                            <td className="py-3 px-4 text-center font-sans">
+                              {ch.androidAppVisits > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20 text-[10px] font-semibold">
+                                  <Smartphone className="w-3 h-3" />
+                                  {ch.androidAppShare}% App
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-semibold">
+                                  <Laptop className="w-3 h-3" />
+                                  100% Web
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-emerald-400 font-mono">
+                              {ch.conversions > 0 ? ch.conversions : '—'}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono">
+                              {ch.conversionRate > 0 ? (
+                                <span className="px-2 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  {ch.conversionRate}%
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 4. Top Referrers Table (Sortable & Filterable) */}
+                <div className="bg-slate-900/80 rounded-xl border border-slate-800 overflow-hidden shadow-lg">
+                  <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Globe className="w-4 h-4 text-blue-400" />
+                        Top Acquisition Referrers & Native Origins
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Deep dive into exact HTTP document referrers and deep links
+                      </p>
+                    </div>
+
+                    {/* Channel Filter Pills */}
+                    <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                      {['all', 'reddit', 'google', 'direct'].map((f) => (
+                        <button
+                          key={f}
+                          onClick={() => setTrafficFilterChannel(f)}
+                          className={`px-2.5 py-1 text-xs font-semibold rounded capitalize transition ${
+                            trafficFilterChannel === f
+                              ? 'bg-indigo-600 text-white'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {f}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800 bg-slate-950/50 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                          <SortableTh
+                            label="Acquisition Source"
+                            sortKey="cleanName"
+                            currentKey={referrerSortKey}
+                            order={referrerSortOrder}
+                            onSort={(k) => {
+                              if (referrerSortKey === k) {
+                                setReferrerSortOrder(referrerSortOrder === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setReferrerSortKey(k);
+                                setReferrerSortOrder('desc');
+                              }
+                            }}
+                            className="py-3 px-4"
+                          />
+                          <SortableTh
+                            label="Raw HTTP Referrer"
+                            sortKey="referrer"
+                            currentKey={referrerSortKey}
+                            order={referrerSortOrder}
+                            onSort={(k) => {
+                              if (referrerSortKey === k) {
+                                setReferrerSortOrder(referrerSortOrder === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setReferrerSortKey(k);
+                                setReferrerSortOrder('desc');
+                              }
+                            }}
+                            className="py-3 px-4"
+                          />
+                          <SortableTh
+                            label="Page Visits"
+                            sortKey="count"
+                            currentKey={referrerSortKey}
+                            order={referrerSortOrder}
+                            onSort={(k) => {
+                              if (referrerSortKey === k) {
+                                setReferrerSortOrder(referrerSortOrder === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setReferrerSortKey(k);
+                                setReferrerSortOrder('desc');
+                              }
+                            }}
+                            align="right"
+                            className="py-3 px-4"
+                          />
+                          <SortableTh
+                            label="Share %"
+                            sortKey="share"
+                            currentKey={referrerSortKey}
+                            order={referrerSortOrder}
+                            onSort={(k) => {
+                              if (referrerSortKey === k) {
+                                setReferrerSortOrder(referrerSortOrder === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setReferrerSortKey(k);
+                                setReferrerSortOrder('desc');
+                              }
+                            }}
+                            align="right"
+                            className="py-3 px-4"
+                          />
+                          <th className="py-3 px-4 text-left">Traffic Visual Weight</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-mono">
+                        {filteredAndSortedReferrers.map((refItem, idx) => {
+                          const isReddit = refItem.referrer.includes('reddit') || refItem.cleanName.includes('Reddit');
+                          const isGoogle = refItem.referrer.includes('google') || refItem.cleanName.includes('Google');
+                          const isDirect = refItem.referrer === 'direct';
+
+                          return (
+                            <tr key={idx} className="hover:bg-slate-800/40 transition">
+                              <td className="py-3 px-4 text-white font-sans font-bold flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${
+                                  isReddit ? 'bg-orange-500' : isGoogle ? 'bg-emerald-500' : isDirect ? 'bg-blue-500' : 'bg-purple-500'
+                                }`} />
+                                <span>{refItem.cleanName}</span>
+                              </td>
+                              <td className="py-3 px-4 text-slate-400 text-[11px] truncate max-w-xs" title={refItem.referrer}>
+                                {refItem.referrer}
+                              </td>
+                              <td className="py-3 px-4 text-right font-bold text-white">
+                                {refItem.count.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-4 text-right font-bold text-slate-300">
+                                {refItem.share}%
+                              </td>
+                              <td className="py-3 px-4 w-48">
+                                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                                  <div
+                                    style={{ width: `${refItem.share}%` }}
+                                    className={`h-full rounded-full ${
+                                      isReddit ? 'bg-orange-500' : isGoogle ? 'bg-emerald-500' : isDirect ? 'bg-blue-500' : 'bg-purple-500'
+                                    }`}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
